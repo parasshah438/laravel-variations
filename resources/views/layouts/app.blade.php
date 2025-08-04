@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+
+    <title>@yield('title', config('app.name', 'E-Commerce Store'))</title>
+
+    <!-- Bootstrap 5 CSS CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Bootstrap Icons CDN -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Custom Styles -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8f9fa;
+        }
+        
+        .navbar-brand {
+            font-weight: 700;
+            font-size: 1.5rem;
+        }
+        
+        .card {
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+            border: 1px solid rgba(0, 0, 0, 0.125);
+        }
+        
+        .btn {
+            font-weight: 500;
+        }
+        
+        .toast-container {
+            z-index: 1055;
+        }
+        
+        .product-card {
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        
+        .product-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+        }
+        
+        .price-original {
+            text-decoration: line-through;
+            color: #6c757d;
+        }
+        
+        .price-current {
+            color: #dc3545;
+            font-weight: 600;
+        }
+        
+        .badge-discount {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1;
+        }
+        
+        .product-image {
+            height: 200px;
+            object-fit: cover;
+        }
+        
+        footer {
+            background-color: #212529;
+            color: #fff;
+        }
+        
+        .footer-link {
+            color: #adb5bd;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        
+        .footer-link:hover {
+            color: #fff;
+        }
+    </style>
+    
+    @stack('styles')
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
+        <div class="container">
+            <a class="navbar-brand" href="{{ route('home') }}">
+                <i class="bi bi-shop me-2"></i>E-Store
+            </a>
+            
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link {{ request()->routeIs('home') ? 'active' : '' }}" href="{{ route('home') }}">
+                            <i class="bi bi-house me-1"></i>Home
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {{ request()->routeIs('shop.*') ? 'active' : '' }}" href="{{ route('shop.index') }}">
+                            <i class="bi bi-shop me-1"></i>Shop
+                        </a>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-grid me-1"></i>Categories
+                        </a>
+                        <ul class="dropdown-menu">
+                            @php
+                                $categories = \App\Models\Category::whereNull('parent_id')->with('children')->get();
+                            @endphp
+                            @foreach($categories as $category)
+                                <li>
+                                    <a class="dropdown-item" href="{{ route('category.show', $category->slug) }}">
+                                        @if($category->icon)
+                                            <i class="{{ $category->icon }} me-2"></i>
+                                        @endif
+                                        {{ $category->name }}
+                                    </a>
+                                </li>
+                                @if($category->children->count() > 0)
+                                    @foreach($category->children as $child)
+                                        <li>
+                                            <a class="dropdown-item ps-4" href="{{ route('category.show', $child->slug) }}">
+                                                <small>{{ $child->name }}</small>
+                                            </a>
+                                        </li>
+                                    @endforeach
+                                    @if(!$loop->last)
+                                        <li><hr class="dropdown-divider"></li>
+                                    @endif
+                                @endif
+                            @endforeach
+                        </ul>
+                    </li>
+                </ul>
+                
+                <!-- Search Form -->
+                <form class="d-flex me-3" method="GET" action="{{ route('products.search') }}">
+                    <div class="input-group">
+                        <input class="form-control" type="search" name="q" placeholder="Search products..." value="{{ request('q') }}">
+                        <button class="btn btn-outline-light" type="submit">
+                            <i class="bi bi-search"></i>
+                        </button>
+                    </div>
+                </form>
+                
+                <!-- User Actions -->
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link position-relative" href="{{ route('wishlist.index') }}">
+                            <i class="bi bi-heart"></i>
+                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="wishlistCount">
+                                0
+                            </span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link position-relative" href="{{ route('cart.index') }}">
+                            <i class="bi bi-cart"></i>
+                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="cartCount">
+                                0
+                            </span>
+                        </a>
+                    </li>
+                    
+                    @auth
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                                <i class="bi bi-person-circle me-1"></i>{{ Auth::user()->name }}
+                            </a>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="{{ route('orders.index') }}">
+                                    <i class="bi bi-bag me-2"></i>My Orders
+                                </a></li>
+                                <li><a class="dropdown-item" href="{{ route('wishlist.index') }}">
+                                    <i class="bi bi-heart me-2"></i>Wishlist
+                                </a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <form method="POST" action="{{ route('logout') }}">
+                                        @csrf
+                                        <button type="submit" class="dropdown-item">
+                                            <i class="bi bi-box-arrow-right me-2"></i>Logout
+                                        </button>
+                                    </form>
+                                </li>
+                            </ul>
+                        </li>
+                    @else
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ route('login') }}">
+                                <i class="bi bi-box-arrow-in-right me-1"></i>Login
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ route('register') }}">
+                                <i class="bi bi-person-plus me-1"></i>Register
+                            </a>
+                        </li>
+                    @endauth
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="py-4">
+        @yield('content')
+    </main>
+
+    <!-- Footer -->
+    <footer class="mt-5 py-5">
+        <div class="container">
+            <div class="row">
+                <div class="col-lg-4 mb-4">
+                    <h5 class="fw-bold mb-3">
+                        <i class="bi bi-shop me-2"></i>E-Store
+                    </h5>
+                    <p class="text-muted">Your one-stop destination for quality products with amazing variations and unbeatable prices.</p>
+                    <div class="d-flex gap-3">
+                        <a href="#" class="footer-link fs-4"><i class="bi bi-facebook"></i></a>
+                        <a href="#" class="footer-link fs-4"><i class="bi bi-twitter"></i></a>
+                        <a href="#" class="footer-link fs-4"><i class="bi bi-instagram"></i></a>
+                        <a href="#" class="footer-link fs-4"><i class="bi bi-linkedin"></i></a>
+                    </div>
+                </div>
+                <div class="col-lg-2 col-md-6 mb-4">
+                    <h6 class="fw-bold mb-3">Quick Links</h6>
+                    <ul class="list-unstyled">
+                        <li class="mb-2"><a href="{{ route('home') }}" class="footer-link">Home</a></li>
+                        <li class="mb-2"><a href="#" class="footer-link">About Us</a></li>
+                        <li class="mb-2"><a href="#" class="footer-link">Contact</a></li>
+                        <li class="mb-2"><a href="#" class="footer-link">FAQ</a></li>
+                    </ul>
+                </div>
+                <div class="col-lg-2 col-md-6 mb-4">
+                    <h6 class="fw-bold mb-3">Customer Service</h6>
+                    <ul class="list-unstyled">
+                        <li class="mb-2"><a href="#" class="footer-link">Shipping Info</a></li>
+                        <li class="mb-2"><a href="#" class="footer-link">Returns</a></li>
+                        <li class="mb-2"><a href="#" class="footer-link">Size Guide</a></li>
+                        <li class="mb-2"><a href="#" class="footer-link">Track Order</a></li>
+                    </ul>
+                </div>
+                <div class="col-lg-2 col-md-6 mb-4">
+                    <h6 class="fw-bold mb-3">My Account</h6>
+                    <ul class="list-unstyled">
+                        @auth
+                            <li class="mb-2"><a href="{{ route('orders.index') }}" class="footer-link">My Orders</a></li>
+                            <li class="mb-2"><a href="{{ route('wishlist.index') }}" class="footer-link">Wishlist</a></li>
+                        @else
+                            <li class="mb-2"><a href="{{ route('login') }}" class="footer-link">Login</a></li>
+                            <li class="mb-2"><a href="{{ route('register') }}" class="footer-link">Register</a></li>
+                        @endauth
+                        <li class="mb-2"><a href="{{ route('cart.index') }}" class="footer-link">Shopping Cart</a></li>
+                    </ul>
+                </div>
+                <div class="col-lg-2 col-md-6 mb-4">
+                    <h6 class="fw-bold mb-3">Contact Info</h6>
+                    <ul class="list-unstyled text-muted">
+                        <li class="mb-2"><i class="bi bi-geo-alt me-2"></i>123 Store Street, City</li>
+                        <li class="mb-2"><i class="bi bi-telephone me-2"></i>+1 234 567 8900</li>
+                        <li class="mb-2"><i class="bi bi-envelope me-2"></i>info@estore.com</li>
+                    </ul>
+                </div>
+            </div>
+            <hr class="my-4">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <p class="text-muted mb-0">&copy; {{ date('Y') }} E-Store. All rights reserved.</p>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <span class="text-muted">Made with <i class="bi bi-heart-fill text-danger"></i> by Laravel</span>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Toast Container -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="liveToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header">
+                <i class="bi bi-info-circle-fill text-primary me-2"></i>
+                <strong class="me-auto">Notification</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body"></div>
+        </div>
+    </div>
+
+    <!-- Bootstrap 5 JS CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- jQuery CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.0/dist/jquery.min.js"></script>
+    
+    <!-- Custom Scripts -->
+    <script src="/js/guest-cart-manager.js"></script>
+    <script>
+        // Initialize tooltips
+        const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+        const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+
+        // Toast function
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('liveToast');
+            const toastBody = toast.querySelector('.toast-body');
+            const toastHeader = toast.querySelector('.toast-header');
+            
+            // Update toast content
+            toastBody.textContent = message;
+            
+            // Update toast icon based on type
+            const icon = toastHeader.querySelector('i');
+            icon.className = `bi me-2`;
+            
+            switch(type) {
+                case 'success':
+                    icon.classList.add('bi-check-circle-fill', 'text-success');
+                    break;
+                case 'error':
+                case 'danger':
+                    icon.classList.add('bi-exclamation-triangle-fill', 'text-danger');
+                    break;
+                case 'warning':
+                    icon.classList.add('bi-exclamation-circle-fill', 'text-warning');
+                    break;
+                default:
+                    icon.classList.add('bi-info-circle-fill', 'text-primary');
+            }
+            
+            // Show toast
+            const bsToast = new bootstrap.Toast(toast);
+            bsToast.show();
+        }
+
+        // Update cart and wishlist counters
+        function updateCounters() {
+            // Update cart counter
+            $.get('/cart/summary')
+                .done(function(response) {
+                    $('#cartCount').text(response.count || 0);
+                })
+                .fail(function() {
+                    $('#cartCount').text('0');
+                });
+
+            // Update wishlist counter
+            $.get('/wishlist/status')
+                .done(function(response) {
+                    $('#wishlistCount').text(response.count || 0);
+                })
+                .fail(function() {
+                    $('#wishlistCount').text('0');
+                });
+        }
+
+        // Load counters on page load
+        $(document).ready(function() {
+            updateCounters();
+            
+            // Show welcome message for newly logged in users
+            @auth
+                @if(session('login_success'))
+                    showToast('Welcome back! Your cart and wishlist have been updated.', 'success');
+                @endif
+            @endauth
+        });
+    </script>
+    
+    @stack('scripts')
+</body>
+</html>
