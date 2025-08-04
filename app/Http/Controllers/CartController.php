@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Cart;
+use App\Models\SaveForLater;
 use App\Models\ProductVariation;
+use App\Models\Wishlist;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -12,11 +14,12 @@ class CartController extends Controller
     public function index()
     {
         $cartItems = $this->getCartItems();
+        $saveForLaterItems = $this->getSaveForLaterItems();
         $total = $cartItems->sum(function($item) {
             return $item->qty * $item->productVariation->price;
         });
         
-        return view('cart.index', compact('cartItems', 'total'));
+        return view('cart.index', compact('cartItems', 'saveForLaterItems', 'total'));
     }
     
     public function add(Request $request)
@@ -246,5 +249,214 @@ class CartController extends Controller
                 ];
             })
         ]);
+    }
+    
+    // Save for Later functionality
+    public function saveForLater(Request $request, $id)
+    {
+        $cartItem = $this->findCartItem($id);
+        
+        $data = [
+            'product_variation_id' => $cartItem->product_variation_id,
+            'qty' => $cartItem->qty
+        ];
+        
+        if (Auth::check()) {
+            $data['user_id'] = Auth::id();
+            $existing = SaveForLater::where('user_id', Auth::id())
+                                  ->where('product_variation_id', $cartItem->product_variation_id)
+                                  ->first();
+        } else {
+            $data['guest_token'] = session('guest_token');
+            $existing = SaveForLater::where('guest_token', session('guest_token'))
+                                  ->where('product_variation_id', $cartItem->product_variation_id)
+                                  ->first();
+        }
+        
+        if ($existing) {
+            $existing->increment('qty', $cartItem->qty);
+        } else {
+            SaveForLater::create($data);
+        }
+        
+        $cartItem->delete();
+        
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Item saved for later',
+                'cartCount' => $this->getCartCount(),
+                'saveForLaterCount' => $this->getSaveForLaterCount()
+            ]);
+        }
+        
+        return redirect()->route('cart.index')->with('success', 'Item saved for later');
+    }
+    
+    public function moveToCart(Request $request, $id)
+    {
+        $saveForLaterItem = $this->findSaveForLaterItem($id);
+        $variation = $saveForLaterItem->productVariation;
+        
+        if ($variation->stock < $saveForLaterItem->qty) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Insufficient stock available'
+                ], 400);
+            }
+            return redirect()->route('cart.index')->with('error', 'Insufficient stock available');
+        }
+        
+        $data = [
+            'product_variation_id' => $saveForLaterItem->product_variation_id,
+            'qty' => $saveForLaterItem->qty
+        ];
+        
+        if (Auth::check()) {
+            $data['user_id'] = Auth::id();
+            $existing = Cart::where('user_id', Auth::id())
+                           ->where('product_variation_id', $saveForLaterItem->product_variation_id)
+                           ->first();
+        } else {
+            $data['guest_token'] = session('guest_token');
+            $existing = Cart::where('guest_token', session('guest_token'))
+                           ->where('product_variation_id', $saveForLaterItem->product_variation_id)
+                           ->first();
+        }
+        
+        if ($existing) {
+            if ($variation->stock < ($existing->qty + $saveForLaterItem->qty)) {
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Cannot add more items. Stock limit reached.'
+                    ], 400);
+                }
+                return redirect()->route('cart.index')->with('error', 'Cannot add more items. Stock limit reached.');
+            }
+            $existing->increment('qty', $saveForLaterItem->qty);
+        } else {
+            Cart::create($data);
+        }
+        
+        $saveForLaterItem->delete();
+        
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Item moved to cart',
+                'cartCount' => $this->getCartCount(),
+                'saveForLaterCount' => $this->getSaveForLaterCount()
+            ]);
+        }
+        
+        return redirect()->route('cart.index')->with('success', 'Item moved to cart');
+    }
+    
+    public function removeSaveForLater(Request $request, $id)
+    {
+        $saveForLaterItem = $this->findSaveForLaterItem($id);
+        $saveForLaterItem->delete();
+        
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Item removed from save for later',
+                'saveForLaterCount' => $this->getSaveForLaterCount()
+            ]);
+        }
+        
+        return redirect()->route('cart.index')->with('success', 'Item removed from save for later');
+    }
+    
+    public function removeWithOptions(Request $request, $id)
+    {
+        $request->validate([
+            'action' => 'required|in:remove,wishlist'
+        ]);
+        
+        $cartItem = $this->findCartItem($id);
+        
+        if ($request->action === 'wishlist') {
+            // Move to wishlist
+            $data = [
+                'product_id' => $cartItem->productVariation->product_id
+            ];
+            
+            if (Auth::check()) {
+                $data['user_id'] = Auth::id();
+                $existing = Wishlist::where('user_id', Auth::id())
+                                  ->where('product_id', $cartItem->productVariation->product_id)
+                                  ->first();
+            } else {
+                $data['guest_token'] = session('guest_token');
+                $existing = Wishlist::where('guest_token', session('guest_token'))
+                                  ->where('product_id', $cartItem->productVariation->product_id)
+                                  ->first();
+            }
+            
+            if (!$existing) {
+                Wishlist::create($data);
+            }
+            
+            $cartItem->delete();
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Item moved to wishlist',
+                'cartCount' => $this->getCartCount()
+            ]);
+        } else {
+            // Just remove
+            $cartItem->delete();
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Item removed from cart',
+                'cartCount' => $this->getCartCount()
+            ]);
+        }
+    }
+    
+    protected function getSaveForLaterItems()
+    {
+        if (Auth::check()) {
+            return SaveForLater::with(['productVariation.product.images'])
+                             ->where('user_id', Auth::id())
+                             ->get();
+        } else {
+            $guestToken = session('guest_token');
+            if (!$guestToken) return collect();
+            
+            return SaveForLater::with(['productVariation.product.images'])
+                             ->where('guest_token', $guestToken)
+                             ->get();
+        }
+    }
+    
+    protected function getSaveForLaterCount()
+    {
+        if (Auth::check()) {
+            return SaveForLater::where('user_id', Auth::id())->sum('qty');
+        } else {
+            $guestToken = session('guest_token');
+            if (!$guestToken) return 0;
+            
+            return SaveForLater::where('guest_token', $guestToken)->sum('qty');
+        }
+    }
+    
+    protected function findSaveForLaterItem($id)
+    {
+        if (Auth::check()) {
+            return SaveForLater::where('id', $id)
+                             ->where('user_id', Auth::id())
+                             ->firstOrFail();
+        } else {
+            return SaveForLater::where('id', $id)
+                             ->where('guest_token', session('guest_token'))
+                             ->firstOrFail();
+        }
     }
 }

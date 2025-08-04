@@ -19,8 +19,7 @@ class RecentlyViewedController extends Controller
         ]);
 
         $data = [
-            'product_id' => $request->product_id,
-            'viewed_at' => now()
+            'product_id' => $request->product_id
         ];
 
         if (Auth::check()) {
@@ -67,7 +66,7 @@ class RecentlyViewedController extends Controller
                     'slug' => $product->slug,
                     'image' => $product->images->first()?->image_path ?? '/placeholder-image.jpg',
                     'min_price' => $product->getMinPriceAttribute(),
-                    'viewed_at' => $item->viewed_at->diffForHumans()
+                    'viewed_at' => $item->created_at->diffForHumans()
                 ];
             })
         ]);
@@ -81,7 +80,7 @@ class RecentlyViewedController extends Controller
         if (Auth::check()) {
             return RecentlyViewedProduct::with(['product.images', 'product.variations'])
                                       ->where('user_id', Auth::id())
-                                      ->orderBy('viewed_at', 'desc')
+                                      ->orderBy('created_at', 'desc')
                                       ->limit($limit)
                                       ->get();
         } else {
@@ -90,7 +89,7 @@ class RecentlyViewedController extends Controller
             
             return RecentlyViewedProduct::with(['product.images', 'product.variations'])
                                       ->where('guest_token', $guestToken)
-                                      ->orderBy('viewed_at', 'desc')
+                                      ->orderBy('created_at', 'desc')
                                       ->limit($limit)
                                       ->get();
         }
@@ -103,7 +102,7 @@ class RecentlyViewedController extends Controller
     {
         if (Auth::check()) {
             $oldEntries = RecentlyViewedProduct::where('user_id', Auth::id())
-                                             ->orderBy('viewed_at', 'desc')
+                                             ->orderBy('created_at', 'desc')
                                              ->skip(20)
                                              ->pluck('id');
             
@@ -114,7 +113,7 @@ class RecentlyViewedController extends Controller
             $guestToken = session('guest_token');
             if ($guestToken) {
                 $oldEntries = RecentlyViewedProduct::where('guest_token', $guestToken)
-                                                 ->orderBy('viewed_at', 'desc')
+                                                 ->orderBy('created_at', 'desc')
                                                  ->skip(20)
                                                  ->pluck('id');
                 
@@ -142,6 +141,42 @@ class RecentlyViewedController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Recently viewed products cleared'
+        ]);
+    }
+    
+    /**
+     * Debug method to check database state
+     */
+    public function debug()
+    {
+        $totalCount = RecentlyViewedProduct::count();
+        $userCount = Auth::check() ? RecentlyViewedProduct::where('user_id', Auth::id())->count() : 0;
+        $guestToken = session('guest_token');
+        $guestCount = $guestToken ? RecentlyViewedProduct::where('guest_token', $guestToken)->count() : 0;
+        
+        $recentRecords = RecentlyViewedProduct::with('product')
+            ->latest()
+            ->limit(5)
+            ->get()
+            ->map(function($item) {
+                return [
+                    'id' => $item->id,
+                    'user_id' => $item->user_id,
+                    'guest_token' => $item->guest_token,
+                    'product_id' => $item->product_id,
+                    'product_name' => $item->product->name ?? 'Product not found',
+                    'created_at' => $item->created_at->format('Y-m-d H:i:s')
+                ];
+            });
+        
+        return response()->json([
+            'total_count' => $totalCount,
+            'user_count' => $userCount,
+            'guest_count' => $guestCount,
+            'current_user_id' => Auth::id(),
+            'guest_token' => $guestToken,
+            'session_id' => session()->getId(),
+            'recent_records' => $recentRecords
         ]);
     }
 }

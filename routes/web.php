@@ -23,6 +23,8 @@ Route::get('/search', [HomeController::class, 'search'])->name('products.search'
 
 // Product routes
 Route::get('/product/{slug}', [ProductController::class, 'show'])->name('products.show');
+Route::get('/products/{slug}/quick-view', [ProductController::class, 'quickView'])->name('products.quickView');
+Route::get('/products/{product}/variations/{variation}', [ProductController::class, 'getVariation'])->name('products.variation');
 Route::get('/product/{product}/variations', [ProductController::class, 'getVariations'])->name('products.variations');
 
 // Cart routes
@@ -32,6 +34,10 @@ Route::prefix('cart')->name('cart.')->group(function () {
     Route::post('/ajax-add', [CartController::class, 'ajaxAdd'])->name('ajaxAdd');
     Route::put('/{id}', [CartController::class, 'update'])->name('update');
     Route::delete('/{id}', [CartController::class, 'remove'])->name('remove');
+    Route::post('/{id}/save-for-later', [CartController::class, 'saveForLater'])->name('saveForLater');
+    Route::post('/{id}/remove-with-options', [CartController::class, 'removeWithOptions'])->name('removeWithOptions');
+    Route::post('/save-for-later/{id}/move-to-cart', [CartController::class, 'moveToCart'])->name('moveToCart');
+    Route::delete('/save-for-later/{id}', [CartController::class, 'removeSaveForLater'])->name('removeSaveForLater');
     Route::get('/summary', [CartController::class, 'getCartSummary'])->name('summary');
 });
 
@@ -57,6 +63,7 @@ Route::prefix('recently-viewed')->name('recently-viewed.')->group(function () {
     Route::post('/add', [RecentlyViewedController::class, 'addProduct'])->name('add');
     Route::get('/get', [RecentlyViewedController::class, 'getRecentlyViewed'])->name('get');
     Route::delete('/clear', [RecentlyViewedController::class, 'clearAll'])->name('clear');
+    Route::get('/debug', [RecentlyViewedController::class, 'debug'])->name('debug');
 });
 
 // Authenticated routes

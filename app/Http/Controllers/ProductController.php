@@ -66,6 +66,69 @@ class ProductController extends Controller
         return view('products.show', compact('product', 'relatedProducts', 'availableAttributes'));
     }
     
+    public function quickView($slug)
+    {
+        $product = Product::with([
+            'category', 
+            'brand', 
+            'images' => function($q) {
+                $q->orderBy('sort_order')->orderBy('is_main', 'desc');
+            },
+            'variations' => function($q) {
+                $q->with([
+                    'attributeValues.attribute',
+                    'images' => function($imgQuery) {
+                        $imgQuery->orderBy('sort_order')->orderBy('is_main', 'desc');
+                    }
+                ])->orderBy('price');
+            }
+        ])->where('slug', $slug)->where('status', 'active')->firstOrFail();
+        
+        // Get all unique attribute values for this product
+        $availableAttributes = [];
+        foreach ($product->variations as $variation) {
+            foreach ($variation->attributeValues as $attributeValue) {
+                $attributeName = $attributeValue->attribute->name;
+                $availableAttributes[$attributeName][] = [
+                    'id' => $attributeValue->id,
+                    'value' => $attributeValue->value,
+                    'variations' => $product->variations->filter(function($v) use ($attributeValue) {
+                        return $v->attributeValues->contains('id', $attributeValue->id);
+                    })->values()
+                ];
+            }
+        }
+        
+        // Remove duplicates and organize
+        foreach ($availableAttributes as $attributeName => $values) {
+            $availableAttributes[$attributeName] = collect($values)
+                ->unique('id')
+                ->values()
+                ->toArray();
+        }
+        
+        return view('products.quick-view', compact('product', 'availableAttributes'));
+    }
+    
+    public function getVariation($productId, $variationId)
+    {
+        $product = Product::findOrFail($productId);
+        $variation = $product->variations()->findOrFail($variationId);
+        
+        return response()->json([
+            'id' => $variation->id,
+            'price' => $variation->price,
+            'stock' => $variation->stock,
+            'sku' => $variation->sku,
+            'attributes' => $variation->attributeValues->map(function($attr) {
+                return [
+                    'name' => $attr->attribute->name,
+                    'value' => $attr->value
+                ];
+            })
+        ]);
+    }
+    
     public function getVariations(Request $request, $productId)
     {
         $product = Product::with([
