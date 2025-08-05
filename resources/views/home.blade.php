@@ -3,19 +3,12 @@
 @section('title', 'Home - E-Commerce Store')
 
 @section('content')
-<div class="container">
-    <!-- Hero Section -->
-    <div class="row mb-5">
-        <div class="col-12">
-            <div class="bg-primary text-white rounded p-5 text-center">
-                <h1 class="display-4 fw-bold">Welcome to E-Store</h1>
-                <p class="lead">Discover amazing products with great variations and unbeatable prices</p>
-                <a href="#products" class="btn btn-light btn-lg">Shop Now</a>
-            </div>
-        </div>
-    </div>
+<div class="container-fluid px-0">
+    <!-- Hero Slider Section -->
+    <x-slider-new :sliders="$sliders" />
+</div>
 
-    <!-- Filters -->
+<div class="container">{!! "<!-- Filters -->" !!}
     <div class="row mb-4">
         <div class="col-12">
             <div class="card">

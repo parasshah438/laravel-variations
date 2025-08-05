@@ -5,12 +5,19 @@ namespace App\Http\Controllers;
 use App\Models\Product;
 use App\Models\Category;
 use App\Models\Brand;
+use App\Models\Slider;
 use Illuminate\Http\Request;
 
 class HomeController extends Controller
 {
     public function index(Request $request)
     {
+        // Get active sliders for homepage
+        $sliders = Slider::active()
+                        ->withinDateRange()
+                        ->ordered()
+                        ->get();
+
         $query = Product::with(['category.parent', 'brand', 'images', 'variations']);
         
         // Search functionality
@@ -48,7 +55,7 @@ class HomeController extends Controller
         
         $brands = Brand::all();
         
-        return view('home', compact('products', 'categories', 'brands'));
+        return view('home', compact('products', 'categories', 'brands', 'sliders'));
     }
     
     public function loadMore(Request $request)

@@ -35,6 +35,12 @@ class ProductController extends Controller
         foreach ($product->variations as $variation) {
             foreach ($variation->attributeValues as $attributeValue) {
                 $attributeName = $attributeValue->attribute->name;
+                
+                // Initialize array if not exists
+                if (!isset($availableAttributes[$attributeName])) {
+                    $availableAttributes[$attributeName] = [];
+                }
+                
                 $availableAttributes[$attributeName][] = [
                     'id' => $attributeValue->id,
                     'value' => $attributeValue->value,
@@ -66,6 +72,80 @@ class ProductController extends Controller
         return view('products.show', compact('product', 'relatedProducts', 'availableAttributes'));
     }
     
+    public function getVariations(Request $request, $productId)
+    {
+        $product = Product::with([
+            'variations' => function($q) {
+                $q->with([
+                    'attributeValues.attribute',
+                    'images' => function($imgQuery) {
+                        $imgQuery->orderBy('sort_order')->orderBy('is_main', 'desc');
+                    }
+                ])->orderBy('price');
+            }
+        ])->findOrFail($productId);
+        
+        $selectedAttributes = $request->get('attributes', []);
+        
+        // Filter variations based on selected attributes
+        $matchingVariations = $product->variations->filter(function($variation) use ($selectedAttributes) {
+            if (empty($selectedAttributes)) return true;
+            
+            $variationAttributeIds = $variation->attributeValues->pluck('id')->toArray();
+            
+            // Check if all selected attributes are present in this variation
+            foreach ($selectedAttributes as $attributeId) {
+                if (!in_array($attributeId, $variationAttributeIds)) {
+                    return false;
+                }
+            }
+            return true;
+        });
+        
+        if ($matchingVariations->isEmpty()) {
+            return response()->json([
+                'variations' => [],
+                'stock' => 0,
+                'price_range' => ['min' => 0, 'max' => 0],
+                'images' => []
+            ]);
+        }
+        
+        $stock = $matchingVariations->sum('stock');
+        $minPrice = $matchingVariations->min('price');
+        $maxPrice = $matchingVariations->max('price');
+        
+        // Get images from the first matching variation if available
+        $images = [];
+        $firstVariation = $matchingVariations->first();
+        if ($firstVariation && $firstVariation->images->count() > 0) {
+            $images = $firstVariation->images->map(function($image) {
+                return [
+                    'url' => asset('storage/' . $image->image_path),
+                    'id' => $image->id
+                ];
+            })->toArray();
+        } else {
+            // Fallback to product images
+            $images = $product->images->map(function($image) {
+                return [
+                    'url' => asset('storage/' . $image->image_path),
+                    'id' => $image->id
+                ];
+            })->toArray();
+        }
+        
+        return response()->json([
+            'variations' => $matchingVariations->values(),
+            'stock' => $stock,
+            'price_range' => [
+                'min' => $minPrice,
+                'max' => $maxPrice
+            ],
+            'images' => $images
+        ]);
+    }
+    
     public function quickView($slug)
     {
         $product = Product::with([
@@ -89,6 +169,12 @@ class ProductController extends Controller
         foreach ($product->variations as $variation) {
             foreach ($variation->attributeValues as $attributeValue) {
                 $attributeName = $attributeValue->attribute->name;
+                
+                // Initialize array if not exists
+                if (!isset($availableAttributes[$attributeName])) {
+                    $availableAttributes[$attributeName] = [];
+                }
+                
                 $availableAttributes[$attributeName][] = [
                     'id' => $attributeValue->id,
                     'value' => $attributeValue->value,
@@ -129,70 +215,7 @@ class ProductController extends Controller
         ]);
     }
     
-    public function getVariations(Request $request, $productId)
-    {
-        $product = Product::with([
-            'variations' => function($q) {
-                $q->with([
-                    'attributeValues.attribute',
-                    'images' => function($imgQuery) {
-                        $imgQuery->orderBy('sort_order')->orderBy('is_main', 'desc');
-                    }
-                ]);
-            }
-        ])->findOrFail($productId);
-        
-        $selectedAttributes = $request->input('attributes', []);
-        
-        // Filter variations based on selected attributes
-        $matchingVariations = $product->variations->filter(function($variation) use ($selectedAttributes) {
-            foreach ($selectedAttributes as $attributeId => $valueId) {
-                if (!$variation->attributeValues->contains('id', $valueId)) {
-                    return false;
-                }
-            }
-            return true;
-        });
-        
-        // Get images for matching variations
-        $images = [];
-        if ($matchingVariations->count() > 0) {
-            foreach ($matchingVariations as $variation) {
-                foreach ($variation->images as $image) {
-                    $images[] = [
-                        'id' => $image->id,
-                        'url' => asset('storage/' . $image->image_path),
-                        'is_main' => $image->is_main,
-                        'sort_order' => $image->sort_order
-                    ];
-                }
-            }
-        }
-        
-        // If no specific variation images, use general product images
-        if (empty($images)) {
-            foreach ($product->images as $image) {
-                if (!$image->product_variation_id) { // General product images
-                    $images[] = [
-                        'id' => $image->id,
-                        'url' => asset('storage/' . $image->image_path),
-                        'is_main' => $image->is_main,
-                        'sort_order' => $image->sort_order
-                    ];
-                }
-            }
-        }
-        
-        return response()->json([
-            'variations' => $matchingVariations->values(),
-            'images' => collect($images)->sortBy('sort_order')->sortByDesc('is_main')->values()->all(),
-            'price_range' => [
-                'min' => $matchingVariations->min('price'),
-                'max' => $matchingVariations->max('price')
-            ],
-            'stock' => $matchingVariations->sum('stock')
-        ]);
-    }
+
     
     private function addToRecentlyViewed($productId)
     {

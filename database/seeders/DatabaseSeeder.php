@@ -30,7 +30,7 @@ class DatabaseSeeder extends Seeder
             ProductVariationSeeder::class,
             CouponSeeder::class,
             AttributeSeeder::class,
-            
+            ProductVariationAttributesSeeder::class,
         ]);
     }
 }

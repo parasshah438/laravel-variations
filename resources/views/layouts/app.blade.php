@@ -385,5 +385,282 @@
     </script>
     
     @stack('scripts')
+    
+    <!-- Amazon-Style Quantity Controls -->
+    <script>
+    $(document).ready(function() {
+        // Amazon-Style Quantity Controls for Product Cards
+        $(document).on('click', '.btn-qty-decrease, .btn-qty-increase', function(e) {
+            e.preventDefault();
+            
+            const $button = $(this);
+            const $input = $button.siblings('.product-qty-input, .cart-qty-input');
+            const isDecrease = $button.hasClass('btn-qty-decrease');
+            const productId = $button.data('product-id') || $button.data('item-id');
+            const isCartItem = $button.closest('.cart-item, .quantity-group').length > 0;
+            
+            let currentQty = parseInt($input.val()) || 1;
+            let maxQty = parseInt($input.attr('max')) || 999;
+            let newQty = currentQty;
+            
+            if (isDecrease) {
+                if (currentQty <= 1 && isCartItem) {
+                    // Remove from cart if quantity is 1 and user clicks decrease
+                    if (confirm('Are you sure you want to remove this item from cart?')) {
+                        removeFromCart(productId);
+                    }
+                    return;
+                } else {
+                    newQty = Math.max(1, currentQty - 1);
+                }
+            } else {
+                newQty = Math.min(maxQty, currentQty + 1);
+                if (newQty >= maxQty) {
+                    showToast(`Maximum quantity available is ${maxQty}`, 'warning');
+                }
+            }
+            
+            // Update input value
+            $input.val(newQty);
+            
+            // Update hidden quantity input in forms
+            $input.closest('.product-card, .card').find('.quantity-input').val(newQty);
+            
+            // Update button icons
+            updateQtyIcons($button.closest('.quantity-group'), newQty);
+            
+            // If it's a cart item, update cart via AJAX
+            if (isCartItem) {
+                updateCartQuantity(productId, newQty);
+            }
+        });
+        
+        // Direct input change for quantity
+        $(document).on('change', '.product-qty-input, .cart-qty-input', function() {
+            const $input = $(this);
+            const newQty = parseInt($input.val()) || 1;
+            const maxQty = parseInt($input.attr('max')) || 999;
+            const minQty = parseInt($input.attr('min')) || 1;
+            const productId = $input.data('product-id') || $input.data('item-id');
+            const isCartItem = $input.closest('.cart-item, .quantity-group').length > 0;
+            
+            // Validate quantity
+            let validQty = Math.max(minQty, Math.min(maxQty, newQty));
+            $input.val(validQty);
+            
+            // Update button icons
+            updateQtyIcons($input.closest('.quantity-group'), validQty);
+            
+            // If it's a cart item, update cart via AJAX
+            if (isCartItem && validQty !== parseInt($input.data('initial'))) {
+                updateCartQuantity(productId, validQty);
+                $input.data('initial', validQty);
+            }
+        });
+        
+        // Update quantity icons (trash for qty=1, minus for qty>1)
+        function updateQtyIcons($container, qty) {
+            const $decreaseBtn = $container.find('.btn-qty-decrease .qty-icon');
+            const isCartItem = $container.closest('.cart-item, .quantity-group').length > 0;
+            
+            if (isCartItem && qty <= 1) {
+                $decreaseBtn.text('🗑️');
+            } else {
+                $decreaseBtn.text('−');
+            }
+        }
+        
+        // Update cart quantity via AJAX
+        function updateCartQuantity(itemId, quantity) {
+            $.ajax({
+                url: '/cart/update-quantity',
+                method: 'POST',
+                data: {
+                    _token: $('meta[name="csrf-token"]').attr('content'),
+                    item_id: itemId,
+                    quantity: quantity
+                },
+                beforeSend: function() {
+                    // Show loading state
+                    $('.quantity-group').addClass('updating');
+                },
+                success: function(response) {
+                    if (response.success) {
+                        // Update item total
+                        const $item = $(`.cart-item[data-item-id="${itemId}"]`);
+                        const price = parseFloat(response.item.price);
+                        const subtotal = price * quantity;
+                        
+                        $item.find('.item-total').text('₹' + subtotal.toLocaleString('en-IN', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                        }));
+                        
+                        // Update cart totals
+                        $('#subtotal').text('₹' + parseFloat(response.cart_total).toLocaleString('en-IN', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                        }));
+                        $('#finalTotal').text('₹' + parseFloat(response.cart_total).toLocaleString('en-IN', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                        }));
+                        
+                        // Update cart counter in navigation
+                        updateCounters();
+                        
+                        showToast('Cart updated successfully', 'success');
+                    } else {
+                        showToast(response.message || 'Failed to update cart', 'error');
+                    }
+                },
+                error: function(xhr) {
+                    showToast('Failed to update cart. Please try again.', 'error');
+                    console.error('Cart update error:', xhr);
+                },
+                complete: function() {
+                    $('.quantity-group').removeClass('updating');
+                }
+            });
+        }
+        
+        // Remove item from cart
+        function removeFromCart(itemId) {
+            $.ajax({
+                url: '/cart/remove',
+                method: 'POST',
+                data: {
+                    _token: $('meta[name="csrf-token"]').attr('content'),
+                    item_id: itemId
+                },
+                beforeSend: function() {
+                    const $item = $(`.cart-item[data-item-id="${itemId}"]`);
+                    $item.addClass('removing');
+                },
+                success: function(response) {
+                    if (response.success) {
+                        // Remove item from DOM
+                        const $item = $(`.cart-item[data-item-id="${itemId}"]`);
+                        $item.fadeOut(300, function() {
+                            $(this).remove();
+                            
+                            // Check if cart is empty
+                            if ($('.cart-item').length === 0) {
+                                location.reload();
+                            }
+                        });
+                        
+                        // Update cart totals
+                        $('#subtotal').text('₹' + parseFloat(response.cart_total).toLocaleString('en-IN', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                        }));
+                        $('#finalTotal').text('₹' + parseFloat(response.cart_total).toLocaleString('en-IN', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                        }));
+                        
+                        // Update cart counter
+                        updateCounters();
+                        
+                        showToast('Item removed from cart', 'success');
+                    } else {
+                        showToast(response.message || 'Failed to remove item', 'error');
+                    }
+                },
+                error: function(xhr) {
+                    showToast('Failed to remove item. Please try again.', 'error');
+                },
+                complete: function() {
+                    $('.removing').removeClass('removing');
+                }
+            });
+        }
+        
+        // Add to cart with quantity
+        $(document).on('submit', '.add-to-cart-form', function(e) {
+            e.preventDefault();
+            
+            const $form = $(this);
+            const $button = $form.find('button[type="submit"]');
+            const $qtyInput = $form.find('.product-qty-input');
+            const quantity = parseInt($qtyInput.val()) || 1;
+            
+            $.ajax({
+                url: $form.attr('action'),
+                method: 'POST',
+                data: $form.serialize(),
+                beforeSend: function() {
+                    $button.prop('disabled', true).html('<i class="spinner-border spinner-border-sm me-2"></i>Adding...');
+                },
+                success: function(response) {
+                    if (response.success) {
+                        showToast(`${quantity} item(s) added to cart!`, 'success');
+                        updateCounters();
+                        
+                        // Reset quantity to 1
+                        $qtyInput.val(1);
+                        updateQtyIcons($form.find('.quantity-group'), 1);
+                    } else {
+                        showToast(response.message || 'Failed to add to cart', 'error');
+                    }
+                },
+                error: function(xhr) {
+                    showToast('Failed to add to cart. Please try again.', 'error');
+                },
+                complete: function() {
+                    $button.prop('disabled', false).html('<i class="bi bi-cart-plus me-2"></i>Add to Cart');
+                }
+            });
+        });
+    });
+    </script>
+    
+    <!-- Quantity Control Styles -->
+    <style>
+        .quantity-group.updating {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+        
+        .quantity-group .btn {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.875rem;
+            border: 1px solid #dee2e6;
+        }
+        
+        .quantity-group .form-control {
+            border-left: 0;
+            border-right: 0;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.875rem;
+        }
+        
+        .quantity-group .btn:first-child {
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
+        }
+        
+        .quantity-group .btn:last-child {
+            border-top-left-radius: 0;
+            border-bottom-left-radius: 0;
+        }
+        
+        .qty-icon {
+            font-size: 0.875rem;
+            line-height: 1;
+        }
+        
+        .cart-item.removing {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        
+        @media (max-width: 576px) {
+            .quantity-group {
+                max-width: 120px !important;
+            }
+        }
+    </style>
 </body>
 </html>

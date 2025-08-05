@@ -121,22 +121,24 @@
 
                 <!-- Product Variations -->
                 <div class="variations-section mb-4">
-                    @foreach($availableAttributes as $attributeName => $attributeValues)
-                        <div class="variation-group mb-3">
-                            <label class="form-label fw-bold">{{ $attributeName }}:</label>
-                            <div class="variation-options d-flex flex-wrap gap-2">
-                                @foreach($attributeValues as $attributeValue)
-                                    <button type="button" 
-                                            class="btn btn-outline-secondary variation-btn" 
-                                            data-attribute="{{ strtolower($attributeName) }}"
-                                            data-attribute-id="{{ $attributeValue['id'] }}"
-                                            data-value="{{ $attributeValue['value'] }}">
-                                        {{ $attributeValue['value'] }}
-                                    </button>
-                                @endforeach
+                    @if(count($availableAttributes) > 0)
+                        @foreach($availableAttributes as $attributeName => $attributeValues)
+                            <div class="variation-group mb-3">
+                                <label class="form-label fw-bold">{{ $attributeName }}:</label>
+                                <div class="variation-options d-flex flex-wrap gap-2">
+                                    @foreach($attributeValues as $attributeValue)
+                                        <button type="button" 
+                                                class="btn btn-outline-secondary variation-btn" 
+                                                data-attribute="{{ strtolower($attributeName) }}"
+                                                data-attribute-id="{{ $attributeValue['id'] }}"
+                                                data-value="{{ $attributeValue['value'] }}">
+                                            {{ $attributeValue['value'] }}
+                                        </button>
+                                    @endforeach
+                                </div>
                             </div>
-                        </div>
-                    @endforeach
+                        @endforeach
+                    @endif
                 </div>
 
                 <!-- Quantity Selector -->
@@ -755,40 +757,164 @@ $(document).ready(function() {
     });
     
     // Add to cart
+
     $('#add-to-cart-btn').click(function() {
-        if (!selectedVariationData) {
-            alert('Please select all required options');
-            return;
-        }
+        let variationId = null;
+        
+        // For single variation products
+        @if($product->variations->count() === 1)
+            variationId = {{ $product->variations->first()->id }};
+        @else
+            // For multi-variation products
+            if (!selectedVariationData) {
+                showToast('Please select all required options', 'warning');
+                return;
+            }
+            variationId = selectedVariationData.id;
+        @endif
         
         const quantity = parseInt($('#quantity').val());
         
-        // Add to cart logic here
-        console.log('Adding to cart:', {
-            variation_id: selectedVariationData.id,
-            quantity: quantity
+        $.ajax({
+            url: '{{ route("cart.add") }}',
+            method: 'POST',
+            data: {
+                _token: '{{ csrf_token() }}',
+                product_variation_id: variationId,
+                qty: quantity
+            },
+            beforeSend: function() {
+                $('#add-to-cart-btn').prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Adding...');
+            },
+            success: function(response) {
+                showToast(response.message || 'Product added to cart!', 'success');
+                updateCartCount();
+            },
+            error: function(xhr) {
+                const response = xhr.responseJSON;
+                showToast(response.message || 'Failed to add product to cart', 'danger');
+            },
+            complete: function() {
+                $('#add-to-cart-btn').prop('disabled', false).html('<i class="bi bi-cart-plus me-2"></i>Add to Cart');
+            }
         });
-        
-        // You can implement the actual add to cart AJAX call here
-        alert('Product added to cart!');
     });
     
     // Buy now
     $('#buy-now-btn').click(function() {
-        if (!selectedVariationData) {
-            alert('Please select all required options');
-            return;
+        let variationId = null;
+        
+        // For single variation products
+        @if($product->variations->count() === 1)
+            variationId = {{ $product->variations->first()->id }};
+        @else
+            // For multi-variation products
+            if (!selectedVariationData) {
+                showToast('Please select all required options', 'warning');
+                return;
+            }
+            variationId = selectedVariationData.id;
+        @endif
+        
+        const quantity = parseInt($('#quantity').val());
+        
+        // Add to cart first, then redirect to checkout
+        $.ajax({
+            url: '{{ route("cart.add") }}',
+            method: 'POST',
+            data: {
+                _token: '{{ csrf_token() }}',
+                product_variation_id: variationId,
+                qty: quantity
+            },
+            beforeSend: function() {
+                $('#buy-now-btn').prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Processing...');
+            },
+            success: function(response) {
+                window.location.href = '{{ route("cart.index") }}';
+            },
+            error: function(xhr) {
+                const response = xhr.responseJSON;
+                showToast(response.message || 'Failed to process request', 'danger');
+                $('#buy-now-btn').prop('disabled', false).html('<i class="bi bi-lightning me-2"></i>Buy Now');
+            }
+        });
+    });
+    
+    // Wishlist functionality
+    $('.wishlist-btn').click(function() {
+        const productId = $(this).data('product-id');
+        const button = $(this);
+        
+        $.ajax({
+            url: '{{ route("wishlist.toggle") }}',
+            method: 'POST',
+            data: {
+                _token: '{{ csrf_token() }}',
+                product_id: productId
+            },
+            beforeSend: function() {
+                button.prop('disabled', true);
+            },
+            success: function(response) {
+                if (response.added) {
+                    button.removeClass('btn-outline-danger').addClass('btn-danger');
+                    button.html('<i class="bi bi-heart-fill me-2"></i>Wishlist');
+                    showToast('Added to wishlist', 'success');
+                } else {
+                    button.removeClass('btn-danger').addClass('btn-outline-danger');
+                    button.html('<i class="bi bi-heart me-2"></i>Wishlist');
+                    showToast('Removed from wishlist', 'info');
+                }
+            },
+            error: function(xhr) {
+                if (xhr.status === 401) {
+                    window.location.href = '{{ route("login") }}';
+                } else {
+                    showToast('Failed to update wishlist', 'danger');
+                }
+            },
+            complete: function() {
+                button.prop('disabled', false);
+            }
+        });
+    });
+    
+    // Helper functions
+    function updateCartCount() {
+        $.get('{{ route("cart.summary") }}')
+        .done(function(response) {
+            if ($('.cart-count').length) {
+                $('.cart-count').text(response.count || 0);
+            }
+        });
+    }
+    
+    function showToast(message, type) {
+        // Create and show Bootstrap toast
+        const toast = $(`
+            <div class="toast align-items-center text-white bg-${type === 'success' ? 'success' : (type === 'warning' ? 'warning' : (type === 'info' ? 'info' : 'danger'))} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="d-flex">
+                    <div class="toast-body">
+                        ${message}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            </div>
+        `);
+        
+        if (!$('.toast-container').length) {
+            $('body').append('<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 9999;"></div>');
         }
         
-        // Buy now logic here
-        console.log('Buy now:', {
-            variation_id: selectedVariationData.id,
-            quantity: parseInt($('#quantity').val())
-        });
+        $('.toast-container').append(toast);
+        new bootstrap.Toast(toast[0]).show();
         
-        // Redirect to checkout or implement buy now logic
-        alert('Redirecting to checkout...');
-    });
+        // Remove toast after it's hidden
+        toast.on('hidden.bs.toast', function() {
+            $(this).remove();
+        });
+    }
     
     function updateMainImage() {
         if (availableImages[currentImageIndex]) {
@@ -805,13 +931,17 @@ $(document).ready(function() {
     }
     
     function updateProductDisplay() {
-        // If we have selected all required attributes, fetch variation data
-        const selectedAttributeIds = {};
-        Object.keys(selectedVariations).forEach(key => {
-            selectedAttributeIds[selectedVariations[key].id] = selectedVariations[key].id;
-        });
+        // Count total number of attribute types
+        const totalAttributeTypes = {{ count($availableAttributes) }};
         
-        if (Object.keys(selectedVariations).length > 0) {
+        // If we have selected all required attributes, fetch variation data
+        if (Object.keys(selectedVariations).length === totalAttributeTypes && totalAttributeTypes > 0) {
+            // Convert selected variations to array of attribute value IDs
+            const selectedAttributeIds = [];
+            Object.keys(selectedVariations).forEach(key => {
+                selectedAttributeIds.push(selectedVariations[key].id);
+            });
+            
             // Make AJAX call to get variation-specific data
             $.ajax({
                 url: '{{ route("products.variations", $product->id) }}',
@@ -820,7 +950,7 @@ $(document).ready(function() {
                     attributes: selectedAttributeIds
                 },
                 success: function(response) {
-                    if (response.variations.length > 0) {
+                    if (response.variations && response.variations.length > 0) {
                         selectedVariationData = response.variations[0];
                         
                         // Update price
@@ -837,13 +967,14 @@ $(document).ready(function() {
                         if (stockCount > 0) {
                             $('#stock-info').html('<p class="text-success mb-0"><i class="bi bi-check-circle me-1"></i><span id="stock-count">' + stockCount + '</span> in stock</p>');
                             $('#add-to-cart-btn, #buy-now-btn').prop('disabled', false);
+                            $('#quantity').attr('max', stockCount);
                         } else {
                             $('#stock-info').html('<p class="text-danger mb-0"><i class="bi bi-x-circle me-1"></i>Out of Stock</p>');
                             $('#add-to-cart-btn, #buy-now-btn').prop('disabled', true);
                         }
                         
                         // Update images if available
-                        if (response.images.length > 0) {
+                        if (response.images && response.images.length > 0) {
                             availableImages = response.images;
                             currentImageIndex = 0;
                             
@@ -882,10 +1013,16 @@ $(document).ready(function() {
                         }
                         
                         updateNavigationButtons();
+                    } else {
+                        selectedVariationData = null;
+                        $('#add-to-cart-btn, #buy-now-btn').prop('disabled', true);
+                        $('#stock-info').html('<p class="text-danger mb-0"><i class="bi bi-x-circle me-1"></i>Please select all required options</p>');
                     }
                 },
-                error: function() {
-                    console.log('Error fetching variation data');
+                error: function(xhr, status, error) {
+                    selectedVariationData = null;
+                    $('#add-to-cart-btn, #buy-now-btn').prop('disabled', true);
+                    $('#stock-info').html('<p class="text-danger mb-0"><i class="bi bi-x-circle me-1"></i>Error loading variation data</p>');
                 }
             });
         } else {
@@ -895,32 +1032,8 @@ $(document).ready(function() {
         }
     }
     
-    function updateAvailableOptions(variations) {
-        // Disable unavailable options
-        $('input[name="size"]').each(function() {
-            const size = $(this).val();
-            const available = variations.some(v => v.size === size && v.stock > 0);
-            $(this).prop('disabled', !available);
-            $(this).next('label').toggleClass('disabled', !available);
-        });
-
-        $('input[name="color"]').each(function() {
-            const color = $(this).val();
-            const available = variations.some(v => v.color === color && v.stock > 0);
-            $(this).prop('disabled', !available);
-            $(this).next('label').toggleClass('disabled', !available);
-        });
-
-        $('input[name="fabric"]').each(function() {
-            const fabric = $(this).val();
-            const available = variations.some(v => v.fabric === fabric && v.stock > 0);
-            $(this).prop('disabled', !available);
-            $(this).next('label').toggleClass('disabled', !available);
-        });
-    }
-
-    // Variation change handlers
-    $('input[name="size"], input[name="color"], input[name="fabric"]').change(updateProductDisplay);
+    // Variation change handlers - remove unused handlers
+    // $('input[name="size"], input[name="color"], input[name="fabric"]').change(updateProductDisplay);
 
     // Initialize for single variation products
     @if($product->variations->count() === 1)
@@ -936,28 +1049,39 @@ $(document).ready(function() {
                 price: {{ $singleVariation->price }}
             };
             $('#quantity').attr('max', {{ $singleVariation->stock }});
+            
+            // Update price display for single variation
+            $('#current-price').text('₹' + parseFloat({{ $singleVariation->price }}).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+            
         @else
             $('#stock-info').html('<p class="text-danger mb-0"><i class="bi bi-x-circle me-1"></i>Out of Stock</p>');
         @endif
+    @elseif($product->variations->count() === 0)
+        // No variations available - this shouldn't happen in a proper e-commerce setup
+        $('#add-to-cart-btn, #buy-now-btn').prop('disabled', true);
+        $('#stock-info').html('<p class="text-danger mb-0"><i class="bi bi-x-circle me-1"></i>No variations available</p>');
+    @else
+        // Multiple variations - buttons stay disabled until user selects options
+        $('#add-to-cart-btn, #buy-now-btn').prop('disabled', true);
+        
+        // Enable button temporarily if no attributes (should have at least one variation)
+        @if(count($availableAttributes) === 0 && $product->variations->count() > 0)
+            @php
+                $firstVariation = $product->variations->first();
+            @endphp
+            @if($firstVariation->stock > 0)
+                $('#add-to-cart-btn, #buy-now-btn').prop('disabled', false);
+                selectedVariationData = {
+                    id: {{ $firstVariation->id }},
+                    stock: {{ $firstVariation->stock }},
+                    price: {{ $firstVariation->price }}
+                };
+                $('#quantity').attr('max', {{ $firstVariation->stock }});
+            @endif
+        @endif
     @endif
 
-    // Quantity controls (these are already handled in the main quantity control section above)
-    // Removed duplicate handlers for #increaseQty and #decreaseQty as they don't exist in HTML
-
-    // Add to cart (this functionality is already handled above with correct ID #add-to-cart-btn)
-    // Removed duplicate handler for #addToCartBtn
-
-    // Buy now (this functionality is already handled above with correct ID #buy-now-btn)
-    // Removed duplicate handler for #buyNowBtn
-
-    // Wishlist toggle (this functionality is already handled above)
-    // Removed duplicate handler
-
-    // Initialize variations on page load (removed function call as it's handled by variation button clicks)
-    @if($product->variations->count() > 1)
-        // updateProductDisplay(); // Removed as variations are updated when user selects options
-    @endif
-
+    
     // ============ PRODUCT CUSTOMIZATION FUNCTIONALITY ============
     
     // Initialize Fabric.js canvas when customization modal is opened

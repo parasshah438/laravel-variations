@@ -143,40 +143,4 @@ class RecentlyViewedController extends Controller
             'message' => 'Recently viewed products cleared'
         ]);
     }
-    
-    /**
-     * Debug method to check database state
-     */
-    public function debug()
-    {
-        $totalCount = RecentlyViewedProduct::count();
-        $userCount = Auth::check() ? RecentlyViewedProduct::where('user_id', Auth::id())->count() : 0;
-        $guestToken = session('guest_token');
-        $guestCount = $guestToken ? RecentlyViewedProduct::where('guest_token', $guestToken)->count() : 0;
-        
-        $recentRecords = RecentlyViewedProduct::with('product')
-            ->latest()
-            ->limit(5)
-            ->get()
-            ->map(function($item) {
-                return [
-                    'id' => $item->id,
-                    'user_id' => $item->user_id,
-                    'guest_token' => $item->guest_token,
-                    'product_id' => $item->product_id,
-                    'product_name' => $item->product->name ?? 'Product not found',
-                    'created_at' => $item->created_at->format('Y-m-d H:i:s')
-                ];
-            });
-        
-        return response()->json([
-            'total_count' => $totalCount,
-            'user_count' => $userCount,
-            'guest_count' => $guestCount,
-            'current_user_id' => Auth::id(),
-            'guest_token' => $guestToken,
-            'session_id' => session()->getId(),
-            'recent_records' => $recentRecords
-        ]);
-    }
 }

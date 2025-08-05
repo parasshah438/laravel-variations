@@ -21,6 +21,8 @@ Route::get('/category/{slug}', [HomeController::class, 'category'])->name('categ
 Route::get('/load-more', [HomeController::class, 'loadMore'])->name('products.load-more');
 Route::get('/search', [HomeController::class, 'search'])->name('products.search');
 
+Route::get('/new-shop', [ShopController::class, 'newShopPage'])->name('shop.newShopPage');
+
 // Product routes
 Route::get('/product/{slug}', [ProductController::class, 'show'])->name('products.show');
 Route::get('/products/{slug}/quick-view', [ProductController::class, 'quickView'])->name('products.quickView');
@@ -39,6 +41,10 @@ Route::prefix('cart')->name('cart.')->group(function () {
     Route::post('/save-for-later/{id}/move-to-cart', [CartController::class, 'moveToCart'])->name('moveToCart');
     Route::delete('/save-for-later/{id}', [CartController::class, 'removeSaveForLater'])->name('removeSaveForLater');
     Route::get('/summary', [CartController::class, 'getCartSummary'])->name('summary');
+    
+    // Amazon-style AJAX routes
+    Route::post('/update-quantity', [CartController::class, 'updateQuantity'])->name('updateQuantity');
+    Route::post('/remove', [CartController::class, 'removeItem'])->name('removeItem');
 });
 
 // Wishlist routes
@@ -63,7 +69,6 @@ Route::prefix('recently-viewed')->name('recently-viewed.')->group(function () {
     Route::post('/add', [RecentlyViewedController::class, 'addProduct'])->name('add');
     Route::get('/get', [RecentlyViewedController::class, 'getRecentlyViewed'])->name('get');
     Route::delete('/clear', [RecentlyViewedController::class, 'clearAll'])->name('clear');
-    Route::get('/debug', [RecentlyViewedController::class, 'debug'])->name('debug');
 });
 
 // Authenticated routes
@@ -108,6 +113,11 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::delete('products/bulk-delete', [App\Http\Controllers\Admin\AdminProductController::class, 'bulkDelete'])->name('products.bulk-delete');
     Route::delete('products/variations/{variation}', [App\Http\Controllers\Admin\AdminProductController::class, 'deleteVariation'])->name('products.variations.delete');
     Route::delete('products/images/{image}', [App\Http\Controllers\Admin\AdminProductController::class, 'deleteImage'])->name('products.images.delete');
+    
+    // Slider Management
+    Route::resource('sliders', App\Http\Controllers\Admin\SliderController::class);
+    Route::patch('sliders/{slider}/status', [App\Http\Controllers\Admin\SliderController::class, 'updateStatus'])->name('sliders.status');
+    Route::post('sliders/reorder', [App\Http\Controllers\Admin\SliderController::class, 'reorder'])->name('sliders.reorder');
     
     // Order Management
     Route::get('orders', [App\Http\Controllers\Admin\AdminOrderController::class, 'index'])->name('orders.index');

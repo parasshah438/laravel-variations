@@ -98,10 +98,9 @@
             @endif
             
             <!-- Add to Cart Form -->
-            <form method="POST" action="{{ route('cart.ajaxAdd') }}" class="quick-view-add-to-cart">
+            <form method="POST" action="{{ route('cart.add') }}" class="quick-view-add-to-cart">
                 @csrf
-                <input type="hidden" name="product_id" value="{{ $product->id }}">
-                <input type="hidden" name="variation_id" value="{{ $defaultVariation->id }}">
+                <input type="hidden" name="product_variation_id" value="{{ $defaultVariation->id }}" id="quickViewVariationId">
                 
                 <div class="row mb-3">
                     <div class="col-6">
@@ -109,7 +108,7 @@
                         <div class="input-group">
                             <button class="btn btn-outline-secondary" type="button" onclick="decreaseQuantity(this)">-</button>
                             <input type="number" 
-                                   name="quantity" 
+                                   name="qty" 
                                    id="quickViewQuantity"
                                    value="1" 
                                    min="1" 
@@ -194,6 +193,70 @@ $(document).ready(function() {
     $('.quick-view-thumb').click(function() {
         $('.quick-view-thumb').removeClass('active');
         $(this).addClass('active');
+    });
+    
+    // Handle variation selection in quick view
+    $('.quick-view-variation-select').change(function() {
+        const productId = $(this).data('product-id');
+        const selectedVariations = {};
+        
+        // Collect all selected variations
+        $('.quick-view-variation-select').each(function() {
+            const attribute = $(this).data('attribute');
+            const value = $(this).val();
+            if (value) {
+                selectedVariations[attribute] = value;
+            }
+        });
+        
+        // Check if all variations are selected
+        const totalSelects = $('.quick-view-variation-select').length;
+        const selectedCount = Object.keys(selectedVariations).length;
+        
+        if (selectedCount === totalSelects && totalSelects > 0) {
+            // Get the variation for selected attributes
+            const selectedAttributeIds = Object.values(selectedVariations);
+            
+            $.ajax({
+                url: `/product/${productId}/variations`,
+                type: 'GET',
+                data: {
+                    attributes: selectedAttributeIds
+                },
+                success: function(response) {
+                    if (response.variations && response.variations.length > 0) {
+                        const variation = response.variations[0];
+                        
+                        // Update the form with the correct variation ID
+                        $('#quickViewVariationId').val(variation.id);
+                        
+                        // Update price
+                        $('#quickViewPrice').text('₹' + parseFloat(variation.price).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+                        
+                        // Update stock info
+                        if (variation.stock > 0) {
+                            if (variation.stock <= 5) {
+                                $('#quickViewStockInfo').html('<span class="text-warning">Only ' + variation.stock + ' left in stock!</span>');
+                            } else {
+                                $('#quickViewStockInfo').html('<span class="text-success">In Stock</span>');
+                            }
+                            $('#quickViewAddToCartBtn').prop('disabled', false).html('<i class="bi bi-cart-plus"></i> Add to Cart');
+                            $('#quickViewQuantity').attr('max', variation.stock).prop('disabled', false);
+                        } else {
+                            $('#quickViewStockInfo').html('<span class="text-danger">Out of Stock</span>');
+                            $('#quickViewAddToCartBtn').prop('disabled', true).html('Out of Stock');
+                            $('#quickViewQuantity').prop('disabled', true);
+                        }
+                    }
+                },
+                error: function() {
+                    $('#quickViewAddToCartBtn').prop('disabled', true);
+                }
+            });
+        } else {
+            // Not all variations selected, disable add to cart
+            $('#quickViewAddToCartBtn').prop('disabled', true);
+        }
     });
 });
 </script>

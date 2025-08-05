@@ -174,18 +174,29 @@
                                             <div class="fw-bold">₹{{ number_format($item->productVariation->price, 2) }}</div>
                                         </div>
                                         
-                                        <!-- Quantity -->
-                                        <div class="col-6 col-sm-8 col-md-2">
-                                            <div class="input-group input-group-sm">
-                                                <button class="btn btn-outline-secondary qty-btn" type="button" data-action="decrease">-</button>
-                                                <input type="number" class="form-control text-center qty-input" 
-                                                       value="{{ $item->qty }}" min="1" max="{{ $item->productVariation->stock }}"
-                                                       data-item-id="{{ $item->id }}">
-                                                <button class="btn btn-outline-secondary qty-btn" type="button" data-action="increase">+</button>
-                                            </div>
-                                        </div>
-                                        
-                                        <!-- Total & Actions -->
+                        <!-- Quantity -->
+                        <div class="col-6 col-sm-8 col-md-2">
+                            <div class="input-group input-group-sm quantity-group" style="max-width: 140px;">
+                                <button class="btn btn-outline-secondary btn-qty-decrease" type="button" data-item-id="{{ $item->id }}">
+                                    <span class="qty-icon">{{ $item->qty <= 1 ? '🗑️' : '−' }}</span>
+                                </button>
+                                <input type="number" 
+                                       class="form-control text-center cart-qty-input" 
+                                       value="{{ $item->qty }}" 
+                                       data-initial="{{ $item->qty }}"
+                                       data-item-id="{{ $item->id }}"
+                                       data-max="{{ $item->productVariation->stock }}"
+                                       min="1" 
+                                       max="{{ $item->productVariation->stock }}"
+                                       readonly>
+                                <button class="btn btn-outline-secondary btn-qty-increase" type="button" data-item-id="{{ $item->id }}">
+                                    <span class="qty-icon">+</span>
+                                </button>
+                            </div>
+                            @if($item->productVariation->stock <= 3)
+                                <div class="text-danger small">Only {{ $item->productVariation->stock }} left in stock!</div>
+                            @endif
+                        </div>                                        <!-- Total & Actions -->
                                         <div class="col-12 col-md-3 mt-2 mt-md-0">
                                             <div class="fw-bold item-total">₹{{ number_format($item->qty * $item->productVariation->price, 2) }}</div>
                                             <div class="mt-2">

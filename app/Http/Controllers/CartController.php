@@ -29,7 +29,7 @@ class CartController extends Controller
             'qty' => 'required|integer|min:1'
         ]);
         
-        $variation = ProductVariation::findOrFail($request->product_variation_id);
+        $variation = ProductVariation::with('product')->findOrFail($request->product_variation_id);
         
         if ($variation->stock < $request->qty) {
             return response()->json([
@@ -458,5 +458,93 @@ class CartController extends Controller
                              ->where('guest_token', session('guest_token'))
                              ->firstOrFail();
         }
+    }
+    
+    /**
+     * Update cart item quantity via AJAX (Amazon-style)
+     */
+    public function updateQuantity(Request $request)
+    {
+        $request->validate([
+            'item_id' => 'required|integer',
+            'quantity' => 'required|integer|min:1'
+        ]);
+        
+        $cartItem = $this->findCartItem($request->item_id);
+        
+        if (!$cartItem) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Cart item not found'
+            ], 404);
+        }
+        
+        // Check stock availability
+        if ($cartItem->productVariation->stock < $request->quantity) {
+            return response()->json([
+                'success' => false,
+                'message' => "Only {$cartItem->productVariation->stock} items available in stock"
+            ], 400);
+        }
+        
+        // Update quantity
+        $cartItem->update(['qty' => $request->quantity]);
+        
+        // Calculate totals
+        $itemTotal = $cartItem->qty * $cartItem->productVariation->price;
+        $cartTotal = $this->getCartTotal();
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Quantity updated successfully',
+            'item' => [
+                'id' => $cartItem->id,
+                'quantity' => $cartItem->qty,
+                'price' => $cartItem->productVariation->price,
+                'total' => $itemTotal
+            ],
+            'cart_total' => $cartTotal,
+            'cart_count' => $this->getCartCount()
+        ]);
+    }
+    
+    /**
+     * Remove cart item via AJAX (Amazon-style)
+     */
+    public function removeItem(Request $request)
+    {
+        $request->validate([
+            'item_id' => 'required|integer'
+        ]);
+        
+        $cartItem = $this->findCartItem($request->item_id);
+        
+        if (!$cartItem) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Cart item not found'
+            ], 404);
+        }
+        
+        $productName = $cartItem->productVariation->product->name;
+        $cartItem->delete();
+        
+        return response()->json([
+            'success' => true,
+            'message' => "'{$productName}' removed from cart",
+            'cart_total' => $this->getCartTotal(),
+            'cart_count' => $this->getCartCount()
+        ]);
+    }
+    
+    /**
+     * Get cart summary for navigation counter
+     */
+    public function getCartSummary()
+    {
+        return response()->json([
+            'count' => $this->getCartCount(),
+            'total' => $this->getCartTotal()
+        ]);
     }
 }
