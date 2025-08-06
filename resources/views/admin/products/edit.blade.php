@@ -299,6 +299,15 @@
                         <button type="button" class="btn btn-outline-primary" id="generate-variations-btn" disabled>
                             <i class="bi bi-gear me-2"></i>Generate New Variations
                         </button>
+                        
+                        <!-- Selection Summary -->
+                        <div id="selection-summary" class="mt-3 p-3 border rounded bg-info-subtle" style="display: none;">
+                            <h6>📝 Your Selection Summary:</h6>
+                            <div id="summary-content"></div>
+                            <div class="mt-2">
+                                <strong>This will create <span id="combo-count">0</span> new variations</strong>
+                            </div>
+                        </div>
                     </div>
                     
                     <!-- New variations preview -->
@@ -350,11 +359,13 @@ $(document).ready(function() {
         }
         
         toggleGenerateButton();
+        updateSelectionSummary();
     });
     
     // Handle attribute value checkbox changes
     $('.attribute-value-checkbox').change(function() {
         toggleGenerateButton();
+        updateSelectionSummary();
     });
     
     // Generate new variations
@@ -448,6 +459,53 @@ function toggleGenerateButton() {
     $('#generate-variations-btn').prop('disabled', !(hasCheckedAttributes && hasCheckedValues));
 }
 
+function updateSelectionSummary() {
+    const selectedAttributes = [];
+    let totalCombinations = 1;
+    
+    $('.attribute-checkbox:checked').each(function() {
+        const attributeId = $(this).val();
+        const attributeName = $(this).next('label').text();
+        const selectedValues = [];
+        
+        $(`input[name="new_attribute_values[${attributeId}][]"]:checked`).each(function() {
+            selectedValues.push($(this).next('label').text());
+        });
+        
+        if (selectedValues.length > 0) {
+            selectedAttributes.push({
+                name: attributeName,
+                values: selectedValues
+            });
+            totalCombinations *= selectedValues.length;
+        }
+    });
+    
+    if (selectedAttributes.length === 0) {
+        $('#selection-summary').hide();
+        return;
+    }
+    
+    let summaryHtml = '';
+    selectedAttributes.forEach(attr => {
+        summaryHtml += `<div><strong>${attr.name}:</strong> ${attr.values.join(', ')}</div>`;
+    });
+    
+    $('#summary-content').html(summaryHtml);
+    $('#combo-count').text(totalCombinations);
+    
+    // Show warning if too many combinations
+    if (totalCombinations > 10) {
+        $('#selection-summary').removeClass('bg-info-subtle').addClass('bg-warning-subtle');
+        $('#combo-count').parent().html(`<strong class="text-warning">⚠️ This will create ${totalCombinations} new variations - Are you sure?</strong>`);
+    } else {
+        $('#selection-summary').removeClass('bg-warning-subtle').addClass('bg-info-subtle');
+        $('#combo-count').parent().html(`<strong>This will create <span id="combo-count">${totalCombinations}</span> new variations</strong>`);
+    }
+    
+    $('#selection-summary').show();
+}
+
 function generateNewVariations() {
     const selectedAttributes = [];
     
@@ -479,6 +537,13 @@ function generateNewVariations() {
     
     // Generate combinations
     const combinations = generateCombinations(selectedAttributes);
+    
+    // Warning for large number of combinations
+    if (combinations.length > 10) {
+        if (!confirm(`This will create ${combinations.length} new variations. Are you sure you want to continue?`)) {
+            return;
+        }
+    }
     
     let html = '';
     combinations.forEach((combo, index) => {

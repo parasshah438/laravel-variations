@@ -79,6 +79,7 @@ class RecentlyViewedController extends Controller
     {
         if (Auth::check()) {
             return RecentlyViewedProduct::with(['product.images', 'product.variations'])
+                                      ->whereHas('product.variations') // Only products with variations
                                       ->where('user_id', Auth::id())
                                       ->orderBy('created_at', 'desc')
                                       ->limit($limit)
@@ -88,6 +89,7 @@ class RecentlyViewedController extends Controller
             if (!$guestToken) return collect();
             
             return RecentlyViewedProduct::with(['product.images', 'product.variations'])
+                                      ->whereHas('product.variations') // Only products with variations
                                       ->where('guest_token', $guestToken)
                                       ->orderBy('created_at', 'desc')
                                       ->limit($limit)

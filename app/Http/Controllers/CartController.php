@@ -13,10 +13,14 @@ class CartController extends Controller
 {
     public function index()
     {
+        // Clean up any orphaned cart items first
+        $this->cleanupOrphanedCartItems();
+        
         $cartItems = $this->getCartItems();
         $saveForLaterItems = $this->getSaveForLaterItems();
         $total = $cartItems->sum(function($item) {
-            return $item->qty * $item->productVariation->price;
+            // Check if productVariation exists before accessing price
+            return $item->productVariation ? ($item->qty * $item->productVariation->price) : 0;
         });
         
         return view('cart.index', compact('cartItems', 'saveForLaterItems', 'total'));
@@ -195,24 +199,55 @@ class CartController extends Controller
         if (Auth::check()) {
             return Cart::with(['productVariation.product.images'])
                       ->where('user_id', Auth::id())
-                      ->get();
+                      ->get()
+                      ->filter(function($item) {
+                          return $item->productVariation !== null; // Filter out items with deleted variations
+                      });
         } else {
             $guestToken = session('guest_token');
             if (!$guestToken) return collect();
             
             return Cart::with(['productVariation.product.images'])
                       ->where('guest_token', $guestToken)
-                      ->get();
+                      ->get()
+                      ->filter(function($item) {
+                          return $item->productVariation !== null; // Filter out items with deleted variations
+                      });
         }
     }
     
     private function findCartItem($id)
     {
         if (Auth::check()) {
-            return Cart::where('id', $id)->where('user_id', Auth::id())->first();
+            $item = Cart::with('productVariation')->where('id', $id)->where('user_id', Auth::id())->first();
         } else {
             $guestToken = session('guest_token');
-            return Cart::where('id', $id)->where('guest_token', $guestToken)->first();
+            $item = Cart::with('productVariation')->where('id', $id)->where('guest_token', $guestToken)->first();
+        }
+        
+        // If cart item exists but productVariation is null (deleted), remove the cart item
+        if ($item && !$item->productVariation) {
+            $item->delete();
+            return null;
+        }
+        
+        return $item;
+    }
+    
+    // Clean up orphaned cart items (items with deleted variations)
+    private function cleanupOrphanedCartItems()
+    {
+        if (Auth::check()) {
+            Cart::where('user_id', Auth::id())
+                ->whereDoesntHave('productVariation')
+                ->delete();
+        } else {
+            $guestToken = session('guest_token');
+            if ($guestToken) {
+                Cart::where('guest_token', $guestToken)
+                    ->whereDoesntHave('productVariation')
+                    ->delete();
+            }
         }
     }
     
@@ -224,31 +259,12 @@ class CartController extends Controller
     private function getCartTotal()
     {
         return $this->getCartItems()->sum(function($item) {
-            return $item->qty * $item->productVariation->price;
+            // Check if productVariation exists before accessing its properties
+            if ($item->productVariation) {
+                return $item->qty * $item->productVariation->price;
+            }
+            return 0; // Return 0 if variation doesn't exist (deleted)
         });
-    }
-    
-    public function getCartSummary()
-    {
-        $cartItems = $this->getCartItems();
-        $total = $cartItems->sum(function($item) {
-            return $item->qty * $item->productVariation->price;
-        });
-        
-        return response()->json([
-            'count' => $cartItems->sum('qty'),
-            'total' => number_format($total, 2),
-            'items' => $cartItems->map(function($item) {
-                return [
-                    'id' => $item->id,
-                    'name' => $item->productVariation->product->name,
-                    'variation' => $item->productVariation->variation_name,
-                    'price' => $item->productVariation->price,
-                    'qty' => $item->qty,
-                    'total' => $item->qty * $item->productVariation->price
-                ];
-            })
-        ]);
     }
     
     // Save for Later functionality

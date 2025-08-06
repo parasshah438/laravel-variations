@@ -46,9 +46,19 @@
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <div>
                                 @if($product->variations->count() > 1)
-                                    <span class="fw-bold">₹{{ number_format($product->minPrice(), 2) }} - ₹{{ number_format($product->maxPrice(), 2) }}</span>
-                                @else
+                                    @php
+                                        $minPrice = $product->minPrice();
+                                        $maxPrice = $product->maxPrice();
+                                    @endphp
+                                    @if($minPrice && $maxPrice)
+                                        <span class="fw-bold">₹{{ number_format($minPrice, 2) }} - ₹{{ number_format($maxPrice, 2) }}</span>
+                                    @else
+                                        <span class="fw-bold text-muted">Price not set</span>
+                                    @endif
+                                @elseif($product->variations->count() == 1 && $product->variations->first())
                                     <span class="fw-bold">₹{{ number_format($product->variations->first()->price, 2) }}</span>
+                                @else
+                                    <span class="fw-bold text-muted">Price not available</span>
                                 @endif
                             </div>
                             <small class="text-muted">{{ $product->category->name }}</small>
@@ -73,6 +83,8 @@
                             @elseif($stock && $stock->stock > 0)
                             <div class="text-success small">In Stock</div>
                             <button type="submit" class="btn btn-primary w-100">Add to Cart</button>
+                            @else
+                            <button class="btn btn-secondary w-100" disabled>Not Available</button>
                             @endif
                         </form>
                         

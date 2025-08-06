@@ -97,6 +97,7 @@ class WishlistController extends Controller
     {
         if (Auth::check()) {
             return Wishlist::with(['product.images', 'product.variations'])
+                          ->whereHas('product.variations') // Only get items with variations
                           ->where('user_id', Auth::id())
                           ->get();
         } else {
@@ -104,6 +105,7 @@ class WishlistController extends Controller
             if (!$guestToken) return collect();
             
             return Wishlist::with(['product.images', 'product.variations'])
+                          ->whereHas('product.variations') // Only get items with variations
                           ->where('guest_token', $guestToken)
                           ->get();
         }

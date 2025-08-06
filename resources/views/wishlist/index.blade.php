@@ -60,9 +60,19 @@
                                         <div class="d-flex justify-content-between align-items-center mb-3">
                                             <div>
                                                 @if($item->product->variations->count() > 1)
-                                                    <span class="fw-bold">${{ number_format($item->product->minPrice(), 2) }} - ${{ number_format($item->product->maxPrice(), 2) }}</span>
-                                                @else
+                                                    @php
+                                                        $minPrice = $item->product->minPrice();
+                                                        $maxPrice = $item->product->maxPrice();
+                                                    @endphp
+                                                    @if($minPrice && $maxPrice)
+                                                        <span class="fw-bold">${{ number_format($minPrice, 2) }} - ${{ number_format($maxPrice, 2) }}</span>
+                                                    @else
+                                                        <span class="fw-bold text-muted">Price not set</span>
+                                                    @endif
+                                                @elseif($item->product->variations->count() == 1 && $item->product->variations->first())
                                                     <span class="fw-bold">${{ number_format($item->product->variations->first()->price, 2) }}</span>
+                                                @else
+                                                    <span class="fw-bold text-muted">Price not available</span>
                                                 @endif
                                             </div>
                                             <small class="text-muted">{{ $item->product->category->name }}</small>

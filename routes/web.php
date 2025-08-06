@@ -24,10 +24,12 @@ Route::get('/search', [HomeController::class, 'search'])->name('products.search'
 Route::get('/new-shop', [ShopController::class, 'newShopPage'])->name('shop.newShopPage');
 
 // Product routes
-Route::get('/product/{slug}', [ProductController::class, 'show'])->name('products.show');
+Route::get('/', [HomeController::class, 'index'])->name('home');
+Route::get('/product/{product:slug}', [ProductController::class, 'show'])->name('products.show');
 Route::get('/products/{slug}/quick-view', [ProductController::class, 'quickView'])->name('products.quickView');
 Route::get('/products/{product}/variations/{variation}', [ProductController::class, 'getVariation'])->name('products.variation');
 Route::get('/product/{product}/variations', [ProductController::class, 'getVariations'])->name('products.variations');
+Route::get('/product/{product}/filtered-attributes', [ProductController::class, 'getFilteredAttributes'])->name('products.filtered-attributes');
 
 // Cart routes
 Route::prefix('cart')->name('cart.')->group(function () {

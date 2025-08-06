@@ -30,9 +30,11 @@ class ProductController extends Controller
         // Add to recently viewed
         $this->addToRecentlyViewed($product->id);
         
-        // Get all unique attribute values for this product
+        // Get all unique attribute values for this product with smart filtering
         $availableAttributes = [];
-        foreach ($product->variations as $variation) {
+        $allVariations = $product->variations->where('stock', '>', 0); // Only consider in-stock variations
+        
+        foreach ($allVariations as $variation) {
             foreach ($variation->attributeValues as $attributeValue) {
                 $attributeName = $attributeValue->attribute->name;
                 
@@ -41,22 +43,20 @@ class ProductController extends Controller
                     $availableAttributes[$attributeName] = [];
                 }
                 
-                $availableAttributes[$attributeName][] = [
-                    'id' => $attributeValue->id,
-                    'value' => $attributeValue->value,
-                    'variations' => $product->variations->filter(function($v) use ($attributeValue) {
-                        return $v->attributeValues->contains('id', $attributeValue->id);
-                    })->values()
-                ];
+                // Check if this attribute value already exists
+                $exists = collect($availableAttributes[$attributeName])->contains('id', $attributeValue->id);
+                
+                if (!$exists) {
+                    $availableAttributes[$attributeName][] = [
+                        'id' => $attributeValue->id,
+                        'value' => $attributeValue->value,
+                        'attribute_name' => $attributeName,
+                        'stock_count' => $allVariations->filter(function($v) use ($attributeValue) {
+                            return $v->attributeValues->contains('id', $attributeValue->id);
+                        })->sum('stock')
+                    ];
+                }
             }
-        }
-        
-        // Remove duplicates and organize
-        foreach ($availableAttributes as $attributeName => $values) {
-            $availableAttributes[$attributeName] = collect($values)
-                ->unique('id')
-                ->values()
-                ->toArray();
         }
         
         // Get related products
@@ -70,6 +70,101 @@ class ProductController extends Controller
         ->get();
         
         return view('products.show', compact('product', 'relatedProducts', 'availableAttributes'));
+    }
+    
+    public function getFilteredAttributes(Request $request, $productId)
+    {
+        $product = Product::with(['variations.attributeValues.attribute'])->findOrFail($productId);
+        $selectedAttributes = $request->input('selected', []);
+        
+        // Get variations that match the selected attributes
+        $availableVariations = $product->variations->filter(function($variation) use ($selectedAttributes) {
+            if (empty($selectedAttributes)) {
+                return $variation->stock > 0; // Only in-stock variations
+            }
+            
+            $variationAttributeIds = $variation->attributeValues->pluck('id')->toArray();
+            
+            // Check if this variation contains all selected attributes
+            foreach ($selectedAttributes as $selectedId) {
+                if (!in_array($selectedId, $variationAttributeIds)) {
+                    return false;
+                }
+            }
+            
+            return $variation->stock > 0; // Only in-stock variations
+        });
+        
+        // Build available attributes based on filtered variations
+        $filteredAttributes = [];
+        foreach ($availableVariations as $variation) {
+            foreach ($variation->attributeValues as $attributeValue) {
+                $attributeName = $attributeValue->attribute->name;
+                
+                if (!isset($filteredAttributes[$attributeName])) {
+                    $filteredAttributes[$attributeName] = [];
+                }
+                
+                // Check if this attribute value already exists
+                $exists = collect($filteredAttributes[$attributeName])->contains('id', $attributeValue->id);
+                
+                if (!$exists) {
+                    // Only include if not already selected (to prevent deselection issues)
+                    $isAlreadySelected = in_array($attributeValue->id, $selectedAttributes);
+                    
+                    $filteredAttributes[$attributeName][] = [
+                        'id' => $attributeValue->id,
+                        'value' => $attributeValue->value,
+                        'attribute_name' => $attributeName,
+                        'available' => true,
+                        'already_selected' => $isAlreadySelected,
+                        'stock_count' => $availableVariations->filter(function($v) use ($attributeValue) {
+                            return $v->attributeValues->contains('id', $attributeValue->id);
+                        })->sum('stock')
+                    ];
+                }
+            }
+        }
+        
+        // Also get all possible attributes to mark unavailable ones
+        $allPossibleAttributes = [];
+        foreach ($product->variations as $variation) {
+            foreach ($variation->attributeValues as $attributeValue) {
+                $attributeName = $attributeValue->attribute->name;
+                
+                if (!isset($allPossibleAttributes[$attributeName])) {
+                    $allPossibleAttributes[$attributeName] = [];
+                }
+                
+                $exists = collect($allPossibleAttributes[$attributeName])->contains('id', $attributeValue->id);
+                if (!$exists) {
+                    $isAvailable = isset($filteredAttributes[$attributeName]) && 
+                                  collect($filteredAttributes[$attributeName])->contains('id', $attributeValue->id);
+                    
+                    $allPossibleAttributes[$attributeName][] = [
+                        'id' => $attributeValue->id,
+                        'value' => $attributeValue->value,
+                        'attribute_name' => $attributeName,
+                        'available' => $isAvailable,
+                        'already_selected' => in_array($attributeValue->id, $selectedAttributes),
+                        'stock_count' => $isAvailable ? 
+                            $availableVariations->filter(function($v) use ($attributeValue) {
+                                return $v->attributeValues->contains('id', $attributeValue->id);
+                            })->sum('stock') : 0
+                    ];
+                }
+            }
+        }
+        
+        return response()->json([
+            'success' => true,
+            'attributes' => $allPossibleAttributes, // Show all, but mark availability
+            'available_variations_count' => $availableVariations->count(),
+            'debug' => [
+                'selected_attributes' => $selectedAttributes,
+                'available_variations' => $availableVariations->pluck('id')->toArray()
+            ]
+        ]);
     }
     
     public function getVariations(Request $request, $productId)

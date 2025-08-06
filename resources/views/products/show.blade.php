@@ -540,10 +540,21 @@
     color: white;
 }
 
-.variation-btn:hover {
+.variation-btn:hover:not(:disabled) {
     background-color: #0056b3;
     border-color: #0056b3;
     color: white;
+}
+
+.variation-btn.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    text-decoration: line-through;
+}
+
+.variation-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
 .product-card {
@@ -723,22 +734,112 @@ $(document).ready(function() {
         const attributeId = $(this).data('attribute-id');
         const value = $(this).data('value');
         
+        console.log('Variation button clicked:', {attribute, attributeId, value});
+        
         // Toggle selection
         if ($(this).hasClass('active')) {
+            // Deselecting - remove from selectedVariations
             $(this).removeClass('active');
             delete selectedVariations[attribute];
+            console.log('Deselected:', attribute);
         } else {
-            // Remove active class from siblings
+            // Selecting - remove active class from siblings and add to this one
             $(`.variation-btn[data-attribute="${attribute}"]`).removeClass('active');
             $(this).addClass('active');
             selectedVariations[attribute] = {
                 id: attributeId,
                 value: value
             };
+            console.log('Selected:', attribute, selectedVariations[attribute]);
         }
         
+        console.log('Current selected variations:', selectedVariations);
+        
+        // Update available options based on current selection (Amazon/Flipkart style)
+        updateAvailableOptions();
         updateProductDisplay();
     });
+    
+    // Amazon/Flipkart style variation filtering
+    function updateAvailableOptions() {
+        const selectedIds = Object.values(selectedVariations).map(v => v.id);
+        
+        console.log('=== UPDATING AVAILABLE OPTIONS ===');
+        console.log('Currently selected attribute IDs:', selectedIds);
+        console.log('Selected variations object:', selectedVariations);
+        
+        // Get filtered attributes based on current selection
+        $.ajax({
+            url: '{{ route("products.filtered-attributes", $product->id) }}',
+            type: 'GET',
+            data: {
+                selected: selectedIds
+            },
+            success: function(response) {
+                console.log('🔄 Filtered attributes response:', response);
+                
+                if (response.success) {
+                    console.log('📊 Available variations count:', response.available_variations_count);
+                    
+                    // Update each attribute group
+                    Object.keys(response.attributes).forEach(attributeName => {
+                        const attributeOptions = response.attributes[attributeName];
+                        
+                        console.log(`🏷️ Processing ${attributeName} options:`, attributeOptions);
+                        
+                        // Enable/disable buttons based on availability
+                        $(`.variation-btn[data-attribute="${attributeName.toLowerCase()}"]`).each(function() {
+                            const buttonId = $(this).data('attribute-id');
+                            const buttonValue = $(this).data('value');
+                            const optionData = attributeOptions.find(opt => opt.id === buttonId);
+                            
+                            if (optionData) {
+                                console.log(`🔘 ${attributeName} "${buttonValue}":`, optionData.available ? '✅ Available' : '❌ Not available');
+                                
+                                if (optionData.available || optionData.already_selected) {
+                                    // Available option - enable
+                                    $(this).prop('disabled', false)
+                                          .removeClass('disabled')
+                                          .addClass('btn-outline-secondary')
+                                          .css('opacity', '1')
+                                          .attr('title', '');
+                                    
+                                    // Add stock info if low stock
+                                    if (optionData.stock_count > 0 && optionData.stock_count <= 5) {
+                                        $(this).attr('title', `Only ${optionData.stock_count} left`);
+                                    }
+                                } else {
+                                    // Unavailable option - disable but keep visible
+                                    if (!$(this).hasClass('active')) {
+                                        $(this).prop('disabled', true)
+                                              .addClass('disabled')
+                                              .css('opacity', '0.4')
+                                              .attr('title', 'Not available with current selection');
+                                        
+                                        console.log(`🚫 Disabled ${attributeName} "${buttonValue}" - not available with current selection`);
+                                    }
+                                }
+                            } else {
+                                console.log(`⚠️ No data found for ${attributeName} "${buttonValue}"`);
+                            }
+                        });
+                    });
+                    
+                    console.log('✅ Variation filtering complete');
+                    
+                    // Update the stock info based on available variations
+                    if (response.available_variations_count === 0) {
+                        $('#stock-info').html('<p class="text-danger mb-0"><i class="bi bi-x-circle me-1"></i>No variations available with current selection</p>');
+                    } else if (Object.keys(selectedVariations).length < {{ count($availableAttributes) }}) {
+                        $('#stock-info').html('<p class="text-info mb-0"><i class="bi bi-info-circle me-1"></i>' + response.available_variations_count + ' variations available</p>');
+                    }
+                }
+            },
+            error: function(xhr) {
+                console.error('❌ Failed to get filtered attributes:', xhr);
+            }
+        });
+    }
     
     // Quantity controls
     $('#qty-decrease').click(function() {
@@ -934,13 +1035,25 @@ $(document).ready(function() {
         // Count total number of attribute types
         const totalAttributeTypes = {{ count($availableAttributes) }};
         
+        console.log('=== UPDATE PRODUCT DISPLAY ===');
+        console.log('Selected variations:', selectedVariations);
+        console.log('Total attribute types:', totalAttributeTypes);
+        console.log('Selected count:', Object.keys(selectedVariations).length);
+        
+        // Check if we need all attributes selected or if some variations don't require all
+        const hasAllRequiredAttributes = Object.keys(selectedVariations).length === totalAttributeTypes;
+        
+        console.log('Has all required attributes:', hasAllRequiredAttributes);
+        
         // If we have selected all required attributes, fetch variation data
-        if (Object.keys(selectedVariations).length === totalAttributeTypes && totalAttributeTypes > 0) {
+        if (hasAllRequiredAttributes && totalAttributeTypes > 0) {
             // Convert selected variations to array of attribute value IDs
             const selectedAttributeIds = [];
             Object.keys(selectedVariations).forEach(key => {
                 selectedAttributeIds.push(selectedVariations[key].id);
             });
+            
+            console.log('Fetching variation for attribute IDs:', selectedAttributeIds);
             
             // Make AJAX call to get variation-specific data
             $.ajax({
@@ -950,6 +1063,8 @@ $(document).ready(function() {
                     attributes: selectedAttributeIds
                 },
                 success: function(response) {
+                    console.log('Variation response:', response);
+                    
                     if (response.variations && response.variations.length > 0) {
                         selectedVariationData = response.variations[0];
                         
@@ -968,9 +1083,11 @@ $(document).ready(function() {
                             $('#stock-info').html('<p class="text-success mb-0"><i class="bi bi-check-circle me-1"></i><span id="stock-count">' + stockCount + '</span> in stock</p>');
                             $('#add-to-cart-btn, #buy-now-btn').prop('disabled', false);
                             $('#quantity').attr('max', stockCount);
+                            console.log('✅ BUTTONS ENABLED - Stock available:', stockCount);
                         } else {
                             $('#stock-info').html('<p class="text-danger mb-0"><i class="bi bi-x-circle me-1"></i>Out of Stock</p>');
                             $('#add-to-cart-btn, #buy-now-btn').prop('disabled', true);
+                            console.log('❌ Buttons disabled - out of stock');
                         }
                         
                         // Update images if available
@@ -1014,21 +1131,31 @@ $(document).ready(function() {
                         
                         updateNavigationButtons();
                     } else {
+                        console.log('❌ No variations found for selected attributes');
                         selectedVariationData = null;
                         $('#add-to-cart-btn, #buy-now-btn').prop('disabled', true);
-                        $('#stock-info').html('<p class="text-danger mb-0"><i class="bi bi-x-circle me-1"></i>Please select all required options</p>');
+                        $('#stock-info').html('<p class="text-danger mb-0"><i class="bi bi-x-circle me-1"></i>This combination is not available</p>');
                     }
                 },
                 error: function(xhr, status, error) {
+                    console.error('❌ Error fetching variation:', error);
                     selectedVariationData = null;
                     $('#add-to-cart-btn, #buy-now-btn').prop('disabled', true);
                     $('#stock-info').html('<p class="text-danger mb-0"><i class="bi bi-x-circle me-1"></i>Error loading variation data</p>');
                 }
             });
-        } else {
-            // Reset to default display
+        } else if (totalAttributeTypes > 0) {
+            // Not all attributes selected yet
+            console.log('⏳ Not all attributes selected yet - need', totalAttributeTypes - Object.keys(selectedVariations).length, 'more');
             selectedVariationData = null;
+            $('#stock-info').html('<p class="text-warning mb-0"><i class="bi bi-exclamation-circle me-1"></i>Please select all required options (' + Object.keys(selectedVariations).length + '/' + totalAttributeTypes + ')</p>');
+            
+            // Keep buttons disabled until all selections made
             $('#add-to-cart-btn, #buy-now-btn').prop('disabled', true);
+        } else {
+            // No attributes required, product should be available
+            console.log('ℹ️ No attributes required');
+            selectedVariationData = null;
         }
     }
     
@@ -1062,10 +1189,14 @@ $(document).ready(function() {
         $('#stock-info').html('<p class="text-danger mb-0"><i class="bi bi-x-circle me-1"></i>No variations available</p>');
     @else
         // Multiple variations - buttons stay disabled until user selects options
+        console.log('Multiple variations detected - {{ $product->variations->count() }} variations');
+        console.log('Available attributes: {{ count($availableAttributes) }}');
         $('#add-to-cart-btn, #buy-now-btn').prop('disabled', true);
+        $('#stock-info').html('<p class="text-warning mb-0"><i class="bi bi-exclamation-circle me-1"></i>Please select all required options</p>');
         
         // Enable button temporarily if no attributes (should have at least one variation)
         @if(count($availableAttributes) === 0 && $product->variations->count() > 0)
+            console.log('Edge case: variations without attributes');
             @php
                 $firstVariation = $product->variations->first();
             @endphp
@@ -1077,8 +1208,16 @@ $(document).ready(function() {
                     price: {{ $firstVariation->price }}
                 };
                 $('#quantity').attr('max', {{ $firstVariation->stock }});
+                console.log('Edge case handled - buttons enabled');
             @endif
         @endif
+    @endif
+    
+    console.log('Page initialization complete - Selected variations:', selectedVariations);
+    
+    // Initialize available options on page load (Amazon/Flipkart style)
+    @if(count($availableAttributes) > 0)
+        updateAvailableOptions();
     @endif
 
     

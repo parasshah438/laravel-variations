@@ -9,11 +9,11 @@ return new class extends Migration {
         Schema::create('product_variations', function (Blueprint $table) {
             $table->id();
             $table->foreignId('product_id')->constrained();
-            $table->string('size')->nullable();
-            $table->string('color')->nullable();
-            $table->string('fabric')->nullable();
+            $table->string('sku')->nullable()->unique();
             $table->decimal('price', 10, 2);
             $table->integer('stock')->default(0);
+            $table->decimal('weight', 8, 2)->nullable(); // in grams
+            $table->boolean('is_active')->default(true);
             $table->timestamps();
         });
     }

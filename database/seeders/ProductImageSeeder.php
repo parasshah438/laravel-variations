@@ -16,7 +16,7 @@ class ProductImageSeeder extends Seeder
             // Create main image
             ProductImage::create([
                 'product_id' => $product->id,
-                'image_path' => 'products/' . strtolower(str_replace(' ', '-', $product->name)) . '-main.jpg',
+                'image_path' => 'https://www.karkhanawala.in/wp-content/uploads/2020/04/RN-White-1.jpg',
                 'is_main' => true,
             ]);
             
@@ -25,7 +25,7 @@ class ProductImageSeeder extends Seeder
             for ($i = 1; $i <= $additionalImages; $i++) {
                 ProductImage::create([
                     'product_id' => $product->id,
-                    'image_path' => 'products/' . strtolower(str_replace(' ', '-', $product->name)) . '-' . $i . '.jpg',
+                    'image_path' => 'https://www.karkhanawala.in/wp-content/uploads/2020/04/RN-White-1.jpg',
                     'is_main' => false,
                 ]);
             }

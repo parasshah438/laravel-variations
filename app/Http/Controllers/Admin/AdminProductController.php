@@ -130,10 +130,11 @@ class AdminProductController extends Controller
                     $sku = $variationData['sku'] ?: $this->generateSKU($product, $index);
                     
                     $variation = $product->variations()->create([
-                        'variation_name' => $this->generateVariationName($variationData['attributes']),
                         'price' => $variationData['price'],
                         'stock' => $variationData['stock'],
                         'sku' => $sku,
+                        'weight' => $variationData['weight'] ?? null,
+                        'is_active' => true,
                     ]);
 
                     // Link attribute values to this variation
@@ -310,10 +311,11 @@ class AdminProductController extends Controller
                         $sku = $variationData['sku'] ?: $this->generateSKU($product, $index + 1000);
                         
                         $variation = $product->variations()->create([
-                            'variation_name' => $this->generateVariationName($variationData['attributes'] ?? []),
                             'price' => $variationData['price'],
                             'stock' => $variationData['stock'],
                             'sku' => $sku,
+                            'weight' => $variationData['weight'] ?? null,
+                            'is_active' => true,
                         ]);
 
                         // Link attribute values to this variation
@@ -408,23 +410,6 @@ class AdminProductController extends Controller
             'success' => true,
             'message' => 'Image deleted successfully!'
         ]);
-    }
-
-    private function generateVariationName($attributes)
-    {
-        if (empty($attributes)) {
-            return 'Default';
-        }
-
-        $names = [];
-        foreach ($attributes as $attribute) {
-            $attributeValue = \App\Models\AttributeValue::find($attribute['attribute_value_id']);
-            if ($attributeValue) {
-                $names[] = $attributeValue->value;
-            }
-        }
-
-        return implode(' / ', $names);
     }
 
     private function generateSKU($product, $index)

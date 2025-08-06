@@ -9,10 +9,19 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class ProductVariation extends Model
 {
-    protected $fillable = ['product_id', 'size', 'color', 'fabric', 'price', 'stock'];
+    protected $fillable = [
+        'product_id', 
+        'sku', 
+        'price', 
+        'stock', 
+        'weight', 
+        'is_active'
+    ];
 
     protected $casts = [
         'price' => 'decimal:2',
+        'weight' => 'decimal:2',
+        'is_active' => 'boolean',
     ];
 
     public function product(): BelongsTo
@@ -47,18 +56,26 @@ class ProductVariation extends Model
 
     public function getVariationNameAttribute(): string
     {
-        // If we have attribute values, use them
+        // Use attribute values to generate name
         if ($this->attributeValues && $this->attributeValues->count() > 0) {
-            return $this->attributeValues->map(function($attributeValue) {
+            return $this->attributeValues->sortBy('attribute.name')->map(function($attributeValue) {
+                return $attributeValue->value;
+            })->implode(' / ');
+        }
+        
+        // Fallback if no attributes
+        return "Variation #{$this->id}";
+    }
+    
+    public function getFullVariationNameAttribute(): string
+    {
+        // Detailed version with attribute names
+        if ($this->attributeValues && $this->attributeValues->count() > 0) {
+            return $this->attributeValues->sortBy('attribute.name')->map(function($attributeValue) {
                 return $attributeValue->attribute->name . ': ' . $attributeValue->value;
             })->implode(' | ');
         }
         
-        // Otherwise, use the old system
-        $name = [];
-        if ($this->size) $name[] = $this->size;
-        if ($this->color) $name[] = $this->color;
-        if ($this->fabric) $name[] = $this->fabric;
-        return implode(' - ', $name);
+        return "Variation #{$this->id}";
     }
 }
