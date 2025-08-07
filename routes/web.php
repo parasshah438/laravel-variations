@@ -35,6 +35,29 @@ Route::prefix('visual-search')->name('visual-search.')->group(function () {
     Route::post('/image', [VisualSearchController::class, 'searchByImage'])->name('image');
     Route::post('/camera', [VisualSearchController::class, 'searchByCamera'])->name('camera');
     Route::get('/analytics', [VisualSearchController::class, 'getAnalytics'])->name('analytics');
+    
+    // Debug route for testing
+    Route::get('/debug', function() {
+        $products = \App\Models\Product::with(['images', 'variations'])->take(5)->get();
+        $debug = [];
+        
+        foreach ($products as $product) {
+            $debug[] = [
+                'id' => $product->id,
+                'name' => $product->name,
+                'images_count' => $product->images->count(),
+                'first_image' => $product->images->first()?->image_path,
+                'variations_count' => $product->variations->count(),
+                'min_price' => $product->variations->min('price'),
+            ];
+        }
+        
+        return response()->json([
+            'total_products' => \App\Models\Product::count(),
+            'products' => $debug,
+            'storage_path' => storage_path('app/public/'),
+        ]);
+    })->name('debug');
 });
 
 // Legacy search route (keeping for backward compatibility)
