@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Models\ProductImage;
 use App\Models\ProductVariation;
+use App\Models\ProductVariationImage;
 use App\Models\Category;
 use App\Models\Brand;
 use App\Models\Attribute;
@@ -150,23 +151,18 @@ class AdminProductController extends Controller
                             if ($image && $image->isValid()) {
                                 $imagePath = $image->store('products/variations', 'public');
                                 
-                                // Find the color attribute value for this variation (if exists)
-                                $colorAttributeValueId = null;
-                                foreach ($variationData['attributes'] as $attribute) {
-                                    // Check if this is a color attribute (assuming attribute name contains 'color')
-                                    $attributeValue = \App\Models\AttributeValue::find($attribute['attribute_value_id']);
-                                    if ($attributeValue && stripos($attributeValue->attribute->name, 'color') !== false) {
-                                        $colorAttributeValueId = $attribute['attribute_value_id'];
-                                        break;
-                                    }
-                                }
-                                
-                                ProductImage::create([
+                                // Create the product image first
+                                $productImage = ProductImage::create([
                                     'product_id' => $product->id,
-                                    'product_variation_id' => $variation->id,
-                                    'variation_attribute_value_id' => $colorAttributeValueId,
                                     'image_path' => $imagePath,
                                     'is_main' => false,
+                                    'sort_order' => $imageIndex + 1,
+                                ]);
+                                
+                                // Link this image to the specific variation via pivot table
+                                ProductVariationImage::create([
+                                    'product_variation_id' => $variation->id,
+                                    'product_image_id' => $productImage->id,
                                     'sort_order' => $imageIndex + 1,
                                 ]);
                             }
@@ -208,7 +204,13 @@ class AdminProductController extends Controller
         $categories = Category::orderBy('name')->get();
         $brands = Brand::orderBy('name')->get();
         $attributes = Attribute::with('attributeValues')->orderBy('name')->get();
-        $product->load(['category', 'brand', 'images', 'variations.attributeValues.attribute']);
+        $product->load([
+            'category', 
+            'brand', 
+            'images', 
+            'variations.attributeValues.attribute',
+            'variations.variationImages.productImage'  // Use correct relationship name
+        ]);
         
         return view('admin.products.edit', compact('product', 'categories', 'brands', 'attributes'));
     }
@@ -254,8 +256,8 @@ class AdminProductController extends Controller
                     ProductImage::create([
                         'product_id' => $product->id,
                         'image_path' => $imagePath,
-                        'is_main' => $product->images()->where('product_variation_id', null)->count() === 0,
-                        'sort_order' => $product->images()->where('product_variation_id', null)->count() + $index + 1,
+                        'is_main' => $product->images()->whereNull('variations')->count() === 0,
+                        'sort_order' => $product->images()->whereNull('variations')->count() + $index + 1,
                     ]);
                 }
             }
@@ -280,21 +282,18 @@ class AdminProductController extends Controller
                                 if ($image && $image->isValid()) {
                                     $imagePath = $image->store('products/variations', 'public');
                                     
-                                    // Find the color attribute value for this variation
-                                    $colorAttributeValueId = null;
-                                    foreach ($variation->attributeValues as $attributeValue) {
-                                        if (stripos($attributeValue->attribute->name, 'color') !== false) {
-                                            $colorAttributeValueId = $attributeValue->id;
-                                            break;
-                                        }
-                                    }
-                                    
-                                    ProductImage::create([
+                                    // Create the product image first
+                                    $productImage = ProductImage::create([
                                         'product_id' => $product->id,
-                                        'product_variation_id' => $variation->id,
-                                        'variation_attribute_value_id' => $colorAttributeValueId,
                                         'image_path' => $imagePath,
                                         'is_main' => false,
+                                        'sort_order' => $imageIndex + 1,
+                                    ]);
+                                    
+                                    // Link this image to the specific variation via pivot table
+                                    ProductVariationImage::create([
+                                        'product_variation_id' => $variation->id,
+                                        'product_image_id' => $productImage->id,
                                         'sort_order' => $imageIndex + 1,
                                     ]);
                                 }
@@ -331,24 +330,18 @@ class AdminProductController extends Controller
                                 if ($image && $image->isValid()) {
                                     $imagePath = $image->store('products/variations', 'public');
                                     
-                                    // Find the color attribute value for this variation
-                                    $colorAttributeValueId = null;
-                                    if (isset($variationData['attributes'])) {
-                                        foreach ($variationData['attributes'] as $attribute) {
-                                            $attributeValue = \App\Models\AttributeValue::find($attribute['attribute_value_id']);
-                                            if ($attributeValue && stripos($attributeValue->attribute->name, 'color') !== false) {
-                                                $colorAttributeValueId = $attribute['attribute_value_id'];
-                                                break;
-                                            }
-                                        }
-                                    }
-                                    
-                                    ProductImage::create([
+                                    // Create the product image first
+                                    $productImage = ProductImage::create([
                                         'product_id' => $product->id,
-                                        'product_variation_id' => $variation->id,
-                                        'variation_attribute_value_id' => $colorAttributeValueId,
                                         'image_path' => $imagePath,
                                         'is_main' => false,
+                                        'sort_order' => $imageIndex + 1,
+                                    ]);
+                                    
+                                    // Link this image to the specific variation via pivot table
+                                    ProductVariationImage::create([
+                                        'product_variation_id' => $variation->id,
+                                        'product_image_id' => $productImage->id,
                                         'sort_order' => $imageIndex + 1,
                                     ]);
                                 }
@@ -477,7 +470,9 @@ class AdminProductController extends Controller
         ]);
 
         DB::transaction(function () use ($request) {
-            $products = Product::whereIn('id', $request->ids)->get();
+            $products = Product::whereIn('id', $request->ids)
+                              ->with(['images', 'variations.variationImages.productImage'])
+                              ->get();
             
             foreach ($products as $product) {
                 // Delete product images from storage
@@ -485,9 +480,14 @@ class AdminProductController extends Controller
                     Storage::disk('public')->delete($product->image);
                 }
                 
-                // Delete product images
+                // Delete all product images (general and variation-specific)
                 foreach ($product->images as $image) {
                     Storage::disk('public')->delete($image->image_path);
+                }
+                
+                // Delete variation-specific images and pivot entries
+                foreach ($product->variations as $variation) {
+                    ProductVariationImage::where('product_variation_id', $variation->id)->delete();
                 }
                 
                 // Delete the product (this will cascade delete variations and relations)
@@ -506,7 +506,27 @@ class AdminProductController extends Controller
      */
     public function deleteVariation(ProductVariation $variation)
     {
-        $variation->delete();
+        DB::transaction(function () use ($variation) {
+            // Delete variation-specific images and their pivot entries
+            $variationImages = ProductVariationImage::where('product_variation_id', $variation->id)->get();
+            foreach ($variationImages as $pivotEntry) {
+                // Delete the image file from storage
+                if ($pivotEntry->productImage && $pivotEntry->productImage->image_path) {
+                    Storage::disk('public')->delete($pivotEntry->productImage->image_path);
+                }
+                
+                // Delete the image record
+                if ($pivotEntry->productImage) {
+                    $pivotEntry->productImage->delete();
+                }
+                
+                // Delete the pivot entry
+                $pivotEntry->delete();
+            }
+            
+            // Delete the variation itself (this will also clean up attribute relationships)
+            $variation->delete();
+        });
 
         return response()->json([
             'success' => true,

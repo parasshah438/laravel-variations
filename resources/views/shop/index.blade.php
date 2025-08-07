@@ -5,7 +5,30 @@
 @section('content')
 <div class="container-fluid py-4">
     <div class="row">
-        <!-- Left Sidebar - Filters -->
+        @extends('layouts.app')
+
+@section('title', 'Shop - All Products')
+
+@section('content')
+<!-- Shop Header with Search -->
+<div class="shop-header bg-light py-4 border-bottom">
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-md-6">
+                <h1 class="h3 mb-2">Shop All Products</h1>
+                <p class="text-muted mb-0">Discover our complete collection</p>
+            </div>
+            <div class="col-md-6">
+                <div class="shop-search">
+                    @include('components.advanced-search')
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container-fluid py-4">
+    <div class="row">{!! "<!-- Left Sidebar - Filters -->" !!}
         <div class="col-lg-3 col-md-4">
             <div class="shop-filters sticky-top" style="top: 100px;">
                 <!-- Filter Header -->

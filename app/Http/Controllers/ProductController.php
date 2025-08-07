@@ -19,10 +19,8 @@ class ProductController extends Controller
             },
             'variations' => function($q) {
                 $q->with([
-                    'attributeValues.attribute',
-                    'images' => function($imgQuery) {
-                        $imgQuery->orderBy('sort_order')->orderBy('is_main', 'desc');
-                    }
+                    'attributeValues.attribute'
+                    // Don't load variation images on initial page load
                 ])->orderBy('price');
             }
         ])->where('slug', $slug)->where('status', 'active')->firstOrFail();
@@ -30,9 +28,9 @@ class ProductController extends Controller
         // Add to recently viewed
         $this->addToRecentlyViewed($product->id);
         
-        // Get all unique attribute values for this product with smart filtering
+        // Get all unique attribute values for this product - INCLUDE zero stock items
         $availableAttributes = [];
-        $allVariations = $product->variations->where('stock', '>', 0); // Only consider in-stock variations
+        $allVariations = $product->variations; // Include ALL variations, even out of stock
         
         foreach ($allVariations as $variation) {
             foreach ($variation->attributeValues as $attributeValue) {
@@ -47,13 +45,16 @@ class ProductController extends Controller
                 $exists = collect($availableAttributes[$attributeName])->contains('id', $attributeValue->id);
                 
                 if (!$exists) {
+                    $stockCount = $allVariations->filter(function($v) use ($attributeValue) {
+                        return $v->attributeValues->contains('id', $attributeValue->id);
+                    })->sum('stock');
+                    
                     $availableAttributes[$attributeName][] = [
                         'id' => $attributeValue->id,
                         'value' => $attributeValue->value,
                         'attribute_name' => $attributeName,
-                        'stock_count' => $allVariations->filter(function($v) use ($attributeValue) {
-                            return $v->attributeValues->contains('id', $attributeValue->id);
-                        })->sum('stock')
+                        'stock_count' => $stockCount,
+                        'in_stock' => $stockCount > 0
                     ];
                 }
             }
@@ -173,7 +174,7 @@ class ProductController extends Controller
             'variations' => function($q) {
                 $q->with([
                     'attributeValues.attribute',
-                    'images' => function($imgQuery) {
+                    'variationImages.productImage' => function($imgQuery) {
                         $imgQuery->orderBy('sort_order')->orderBy('is_main', 'desc');
                     }
                 ])->orderBy('price');
@@ -213,23 +214,26 @@ class ProductController extends Controller
         // Get images from the first matching variation if available
         $images = [];
         $firstVariation = $matchingVariations->first();
-        if ($firstVariation && $firstVariation->images->count() > 0) {
-            $images = $firstVariation->images->map(function($image) {
+        if ($firstVariation && $firstVariation->variationImages->count() > 0) {
+            // Use variation-specific images through pivot table
+            $images = $firstVariation->variationImages->map(function($pivotEntry) {
                 return [
-                    'url' => asset('storage/' . $image->image_path),
-                    'id' => $image->id
+                    'url' => asset('storage/' . $pivotEntry->productImage->image_path),
+                    'id' => $pivotEntry->productImage->id,
+                    'is_main' => $pivotEntry->productImage->is_main ?? false
                 ];
             })->toArray();
         } else {
-            // Fallback to product images
+            // Fallback to general product images if no variation-specific images
             $images = $product->images->map(function($image) {
                 return [
                     'url' => asset('storage/' . $image->image_path),
-                    'id' => $image->id
+                    'id' => $image->id,
+                    'is_main' => $image->is_main ?? false
                 ];
             })->toArray();
         }
-        
+             
         return response()->json([
             'variations' => $matchingVariations->values(),
             'stock' => $stock,
@@ -252,7 +256,7 @@ class ProductController extends Controller
             'variations' => function($q) {
                 $q->with([
                     'attributeValues.attribute',
-                    'images' => function($imgQuery) {
+                    'variationImages.productImage' => function($imgQuery) {
                         $imgQuery->orderBy('sort_order')->orderBy('is_main', 'desc');
                     }
                 ])->orderBy('price');

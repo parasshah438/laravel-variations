@@ -30,6 +30,13 @@ class ProductImage extends Model
         return $this->belongsTo(ProductVariation::class);
     }
 
+    public function variations()
+    {
+        return $this->belongsToMany(ProductVariation::class, 'product_variation_images')
+                    ->withPivot('sort_order')
+                    ->orderBy('product_variation_images.sort_order');
+    }
+
     public function attributeValue(): BelongsTo
     {
         return $this->belongsTo(AttributeValue::class, 'variation_attribute_value_id');

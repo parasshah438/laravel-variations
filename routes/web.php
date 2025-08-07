@@ -10,6 +10,8 @@ use App\Http\Controllers\CouponController;
 use App\Http\Controllers\RecentlyViewedController;
 use App\Http\Controllers\AddressController;
 use App\Http\Controllers\ShopController;
+use App\Http\Controllers\SearchController;
+use App\Http\Controllers\VisualSearchController;
 use Illuminate\Support\Facades\Route;
 
 
@@ -19,7 +21,24 @@ Route::get('/shop/products', [ShopController::class, 'getFilteredProducts'])->na
 Route::get('/shop/filter-counts', [ShopController::class, 'getFilterCounts'])->name('shop.filter-counts');
 Route::get('/category/{slug}', [HomeController::class, 'category'])->name('category.show');
 Route::get('/load-more', [HomeController::class, 'loadMore'])->name('products.load-more');
-Route::get('/search', [HomeController::class, 'search'])->name('products.search');
+
+// Search Routes
+Route::get('/search', [SearchController::class, 'index'])->name('search');
+Route::get('/search/suggestions', [SearchController::class, 'suggestions'])->name('search.suggestions');
+Route::get('/search/quick', [SearchController::class, 'quickSearch'])->name('search.quick');
+Route::post('/search/filter', [SearchController::class, 'filter'])->name('search.filter');
+Route::post('/search/visual', [SearchController::class, 'visualSearch'])->name('search.visual');
+Route::get('/search/trending', [SearchController::class, 'trending'])->name('search.trending');
+
+// Visual Search Routes
+Route::prefix('visual-search')->name('visual-search.')->group(function () {
+    Route::post('/image', [VisualSearchController::class, 'searchByImage'])->name('image');
+    Route::post('/camera', [VisualSearchController::class, 'searchByCamera'])->name('camera');
+    Route::get('/analytics', [VisualSearchController::class, 'getAnalytics'])->name('analytics');
+});
+
+// Legacy search route (keeping for backward compatibility)
+Route::get('/products/search', [HomeController::class, 'search'])->name('products.search');
 
 Route::get('/new-shop', [ShopController::class, 'newShopPage'])->name('shop.newShopPage');
 

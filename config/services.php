@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    'google' => [
+        'vision_api_key' => env('GOOGLE_VISION_API_KEY'),
+        'project_id' => env('GOOGLE_CLOUD_PROJECT_ID'),
+    ],
+
 ];

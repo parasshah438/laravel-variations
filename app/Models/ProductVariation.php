@@ -44,9 +44,16 @@ class ProductVariation extends Model
         return $this->belongsToMany(AttributeValue::class, 'product_variation_attribute_values');
     }
 
-    public function images(): HasMany
+    public function images(): BelongsToMany
     {
-        return $this->hasMany(ProductImage::class);
+        return $this->belongsToMany(ProductImage::class, 'product_variation_images')
+                    ->withPivot('sort_order')
+                    ->orderBy('product_variation_images.sort_order');
+    }
+
+    public function variationImages(): HasMany
+    {
+        return $this->hasMany(ProductVariationImage::class);
     }
 
     public function isInStock(): bool

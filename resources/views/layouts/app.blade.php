@@ -13,6 +13,9 @@
     <!-- Bootstrap Icons CDN -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     
+    <!-- Font Awesome as fallback -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -88,6 +91,70 @@
         .footer-link:hover {
             color: #fff;
         }
+        
+        /* Advanced Search Styles */
+        .search-hero .advanced-search-component {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .search-hero .search-input-group {
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        }
+        
+        .shop-header .advanced-search-component {
+            max-width: 400px;
+            margin-left: auto;
+        }
+        
+        /* Navbar search adjustments */
+        .navbar .advanced-search-component .search-input-group {
+            border: 2px solid rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.1);
+        }
+        
+        .navbar .advanced-search-component .search-input {
+            background: transparent;
+            border: none;
+            color: white;
+        }
+        
+        .navbar .advanced-search-component .search-input::placeholder {
+            color: rgba(255,255,255,0.7);
+        }
+        
+        .navbar .advanced-search-component .input-group-text {
+            background: transparent;
+            border: none;
+            color: rgba(255,255,255,0.7);
+        }
+        
+        .navbar .advanced-search-component .voice-search-btn,
+        .navbar .advanced-search-component .visual-search-btn {
+            background: transparent;
+            border: none;
+            color: rgba(255,255,255,0.8);
+        }
+        
+        .navbar .advanced-search-component .voice-search-btn:hover,
+        .navbar .advanced-search-component .visual-search-btn:hover {
+            color: white;
+            background: rgba(255,255,255,0.1);
+        }
+        
+        @media (max-width: 768px) {
+            .search-hero {
+                padding: 2rem 0 !important;
+            }
+            
+            .shop-header {
+                padding: 2rem 0 !important;
+            }
+            
+            .shop-header .col-md-6 {
+                margin-bottom: 1rem;
+            }
+        }
     </style>
     
     @stack('styles')
@@ -150,15 +217,10 @@
                     </li>
                 </ul>
                 
-                <!-- Search Form -->
-                <form class="d-flex me-3" method="GET" action="{{ route('products.search') }}">
-                    <div class="input-group">
-                        <input class="form-control" type="search" name="q" placeholder="Search products..." value="{{ request('q') }}">
-                        <button class="btn btn-outline-light" type="submit">
-                            <i class="bi bi-search"></i>
-                        </button>
-                    </div>
-                </form>
+                <!-- Advanced Search Component -->
+                <div class="me-3 flex-grow-1" style="max-width: 500px;">
+                    @include('components.advanced-search')
+                </div>
                 
                 <!-- User Actions -->
                 <ul class="navbar-nav">
@@ -304,11 +366,33 @@
         </div>
     </div>
 
+    <!-- jQuery CDN (Load First) -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    
     <!-- Bootstrap 5 JS CDN -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
-    <!-- jQuery CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.0/dist/jquery.min.js"></script>
+    <!-- jQuery Check -->
+    <script>
+        if (typeof jQuery === 'undefined') {
+            console.error('jQuery is not loaded!');
+        } else {
+            console.log('jQuery loaded successfully:', jQuery.fn.jquery);
+        }
+        
+        // Check if Bootstrap Icons are loaded
+        $(document).ready(function() {
+            // Test if Bootstrap Icons are working
+            const testIcon = $('<i class="bi bi-heart-fill"></i>').appendTo('body');
+            const iconStyles = window.getComputedStyle(testIcon[0], ':before');
+            if (iconStyles.content && iconStyles.content !== 'none') {
+                console.log('Bootstrap Icons loaded successfully');
+            } else {
+                console.error('Bootstrap Icons may not be loaded properly');
+            }
+            testIcon.remove();
+        });
+    </script>
     
     <!-- Custom Scripts -->
     <script src="/js/guest-cart-manager.js"></script>

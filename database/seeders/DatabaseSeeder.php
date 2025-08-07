@@ -3,6 +3,8 @@
 namespace Database\Seeders;
 
 use App\Models\User;
+use App\Models\Cart;
+use App\Models\Wishlist;
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -13,9 +15,7 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // Create test users
-        User::factory(10)->create();
-
+    
         User::factory()->create([
             'name' => 'Test User',
             'email' => 'test@example.com',
@@ -31,6 +31,7 @@ class DatabaseSeeder extends Seeder
             CouponSeeder::class,
             AttributeSeeder::class,
             ProductVariationAttributesSeeder::class,
+            ProductVariationImageSeeder::class, // Add this for variation-specific images
         ]);
     }
 }

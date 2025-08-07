@@ -8,6 +8,39 @@
     <x-slider-new :sliders="$sliders" />
 </div>
 
+<!-- Search Hero Section -->
+<div class="search-hero bg-light py-5">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-lg-8 col-md-10 text-center">
+                <h2 class="mb-4">Find exactly what you're looking for</h2>
+                <p class="text-muted mb-4">Search through thousands of products with our intelligent search</p>
+                
+                <!-- Advanced Search Component -->
+                <div class="search-hero-form">
+                    @include('components.advanced-search')
+                </div>
+                
+                <!-- Quick Access Categories -->
+                <div class="quick-categories mt-4">
+                    <small class="text-muted d-block mb-3">Popular Categories:</small>
+                    <div class="d-flex flex-wrap justify-content-center gap-2">
+                        @php
+                            $popularCategories = $categories->take(6);
+                        @endphp
+                        @foreach($popularCategories as $category)
+                            <a href="{{ route('search', ['categories' => [$category->id]]) }}" 
+                               class="btn btn-outline-primary btn-sm">
+                                {{ $category->name }}
+                            </a>
+                        @endforeach
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="container">{!! "<!-- Filters -->" !!}
     <div class="row mb-4">
         <div class="col-12">
