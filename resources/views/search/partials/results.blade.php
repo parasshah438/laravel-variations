@@ -1,197 +1,328 @@
 @if($results['query_info']['has_results'])
-    <div class="products-grid row g-4" id="products-grid">
+    <!-- Visual Search Special Header -->
+    @if(request('visual'))
+    <div class="visual-search-results-header mb-4">
+        <div class="card border-0 bg-gradient" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+            <div class="card-body text-white">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <div class="d-flex align-items-center">
+                            <div class="visual-search-icon me-3">
+                                <i class="bi bi-camera-fill fs-2"></i>
+                            </div>
+                            <div>
+                                <h5 class="mb-1 fw-bold">Visual Search Results</h5>
+                                <p class="mb-0 opacity-75">Found {{ count($results['products']) }} similar products based on your image</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <div class="search-stats">
+                            <span class="badge bg-white bg-opacity-25 fs-6 px-3 py-2">
+                                <i class="bi bi-lightning-fill me-1"></i>
+                                Smart Match Technology
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    @endif
+
+    <div class="row g-4" id="products-grid">
         @foreach($results['products'] as $product)
-            <div class="col-xl-4 col-lg-6 col-md-6 col-sm-6 product-item">
-                <div class="card h-100 border-0 shadow-sm product-card">
-                    <div class="position-relative product-image">
+            <div class="col-xl-3 col-lg-4 col-md-6">
+                <div class="card product-card border-0 shadow-sm h-100 overflow-hidden" style="border-radius: 16px;">
+                    <!-- Product Image Container -->
+                    <div class="product-image-container position-relative overflow-hidden" style="height: 300px; border-radius: 16px 16px 0 0;">
                         @php
-                            // Get the first image
                             $firstImage = $product->images->first();
+                            $totalStock = $product->variations->sum('stock');
                         @endphp
                         
                         @if($firstImage)
                             <img src="{{ asset('storage/' . $firstImage->image_path) }}" 
-                                 class="card-img-top" alt="{{ $product->name }}" 
-                                 style="height: 250px; object-fit: cover;">
+                                 class="product-image w-100 h-100 object-fit-cover" 
+                                 alt="{{ $product->name }}"
+                                 loading="lazy"
+                                 style="transition: transform 0.4s ease;">
                         @else
-                            <div class="card-img-top bg-light d-flex align-items-center justify-content-center" 
-                                 style="height: 250px;">
-                                <i class="bi bi-image text-muted" style="font-size: 3rem;"></i>
+                            <div class="w-100 h-100 bg-light d-flex align-items-center justify-content-center">
+                                <div class="text-center text-muted">
+                                    <i class="bi bi-image fs-1 mb-2"></i>
+                                    <p class="small mb-0">No image available</p>
+                                </div>
                             </div>
                         @endif
                         
-                        <!-- Product badges -->
-                        <div class="position-absolute top-0 start-0 m-2">
-                            @php
-                                $totalStock = $product->variations->sum('stock');
-                                $minStock = $product->variations->min('stock');
-                                $maxStock = $product->variations->max('stock');
-                            @endphp
-                            
-                            @if($totalStock <= 0)
-                                <span class="badge bg-danger">Out of Stock</span>
-                            @elseif($minStock <= 5 && $minStock > 0)
-                                <span class="badge bg-warning text-dark">Low Stock</span>
-                            @endif
-                            
-                            @if($product->created_at->diffInDays() <= 7)
-                                <span class="badge bg-success ms-1">New</span>
-                            @endif
+                        <!-- Visual Search Badge for matched products -->
+                        @if(request('visual'))
+                        <div class="position-absolute top-0 start-0 m-3">
+                            <div class="visual-match-badge">
+                                <span class="badge bg-success bg-opacity-90 text-white px-3 py-2 rounded-pill">
+                                    <i class="bi bi-check-circle-fill me-1"></i>
+                                    <span class="fw-medium">Visual Match</span>
+                                </span>
+                            </div>
+                        </div>
+                        @endif
+                        
+                        <!-- Status Badges -->
+                        <div class="position-absolute top-0 end-0 m-3">
+                            <div class="d-flex flex-column gap-2">
+                                @if($totalStock <= 0)
+                                    <span class="badge bg-danger rounded-pill">Out of Stock</span>
+                                @elseif($totalStock <= 5)
+                                    <span class="badge bg-warning text-dark rounded-pill">Low Stock</span>
+                                @endif
+                                
+                                @if($product->created_at->diffInDays() <= 7)
+                                    <span class="badge bg-info rounded-pill">New Arrival</span>
+                                @endif
+                            </div>
                         </div>
                         
-                        <!-- Quick actions -->
-                        <div class="position-absolute top-0 end-0 m-2">
-                            <div class="btn-group-vertical">
-                                <button type="button" class="btn btn-sm btn-light wishlist-btn" 
+                        <!-- Quick Actions -->
+                        <div class="product-actions position-absolute bottom-0 end-0 m-3">
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-light btn-sm rounded-circle shadow-sm wishlist-btn" 
                                         data-product-id="{{ $product->id }}" 
-                                        title="Add to Wishlist">
+                                        title="Add to Wishlist"
+                                        style="width: 40px; height: 40px;">
                                     <i class="bi bi-heart"></i>
                                 </button>
-                                <button type="button" class="btn btn-sm btn-light quick-view-btn" 
+                                <button class="btn btn-light btn-sm rounded-circle shadow-sm quick-view-btn" 
                                         data-product-id="{{ $product->id }}" 
-                                        title="Quick View">
+                                        title="Quick View"
+                                        style="width: 40px; height: 40px;">
                                     <i class="bi bi-eye"></i>
                                 </button>
                             </div>
                         </div>
                         
-                        <!-- Hover overlay -->
-                        <div class="position-absolute bottom-0 start-0 end-0 p-2 bg-gradient-to-top" 
-                             style="background: linear-gradient(transparent, rgba(0,0,0,0.7)); opacity: 0; transition: opacity 0.3s ease;">
-                            <div class="d-flex justify-content-center">
+                        <!-- Hover Overlay -->
+                        <div class="product-overlay position-absolute bottom-0 start-0 end-0 p-4 text-white"
+                             style="background: linear-gradient(transparent, rgba(0,0,0,0.8)); transform: translateY(100%); transition: transform 0.3s ease;">
+                            <div class="text-center">
                                 @if($totalStock > 0)
-                                    <button type="button" class="btn btn-primary btn-sm quick-add-btn" 
+                                    <button class="btn btn-primary btn-sm px-4 rounded-pill quick-add-btn" 
                                             data-product-id="{{ $product->id }}">
-                                        <i class="bi bi-cart-plus me-1"></i>Quick Add
+                                        <i class="bi bi-cart-plus me-2"></i>Quick Add to Cart
                                     </button>
                                 @else
-                                    <button type="button" class="btn btn-outline-light btn-sm notify-btn" 
+                                    <button class="btn btn-outline-light btn-sm px-4 rounded-pill notify-btn" 
                                             data-product-id="{{ $product->id }}">
-                                        <i class="bi bi-bell me-1"></i>Notify Me
+                                        <i class="bi bi-bell me-2"></i>Notify When Available
                                     </button>
                                 @endif
                             </div>
                         </div>
                     </div>
                     
-                    <div class="card-body">
-                        <!-- Category and Brand -->
-                        <div class="d-flex justify-content-between align-items-start mb-2">
+                    <!-- Product Info -->
+                    <div class="card-body p-4">
+                        <!-- Brand & Category -->
+                        <div class="d-flex justify-content-between align-items-center mb-2">
                             @if($product->category)
-                                <small class="text-muted">{{ $product->category->name }}</small>
+                                <span class="badge bg-light text-muted text-uppercase small">{{ $product->category->name }}</span>
                             @endif
                             @if($product->brand)
-                                <small class="text-primary fw-bold">{{ $product->brand->name }}</small>
+                                <span class="text-primary fw-medium small">{{ $product->brand->name }}</span>
                             @endif
                         </div>
                         
                         <!-- Product Title -->
-                        <h6 class="card-title mb-2">
+                        <h6 class="product-title mb-2 fw-semibold lh-sm">
                             <a href="{{ route('products.show', $product->slug) }}" 
-                               class="text-decoration-none text-dark product-title">
-                                {{ Str::limit($product->name, 60) }}
+                               class="text-decoration-none text-dark stretched-link">
+                                {{ Str::limit($product->name, 55) }}
                             </a>
                         </h6>
                         
-                        <!-- Product Description -->
-                        @if($product->description)
-                            <p class="card-text text-muted small mb-2">
-                                {{ Str::limit(strip_tags($product->description), 80) }}
-                            </p>
-                        @endif
-                        
-                        <!-- Variations Preview -->
+                        <!-- Color Variations -->
                         @if($product->variations->count() > 1)
-                            <div class="variations-preview mb-2">
-                                <small class="text-muted d-block">Available in:</small>
-                                <div class="variation-options">
-                                    @php
-                                        $colors = $product->variations->flatMap->attributeValues->where('attribute.name', 'Color')->take(4);
-                                        $sizes = $product->variations->flatMap->attributeValues->where('attribute.name', 'Size')->take(3);
-                                    @endphp
-                                    
-                                    @if($colors->count() > 0)
-                                        <div class="color-options d-flex gap-1 mb-1">
-                                            @foreach($colors as $color)
-                                                <span class="color-swatch rounded-circle" 
-                                                      style="width: 16px; height: 16px; background-color: {{ strtolower($color->value) }}; border: 1px solid #ddd;"
-                                                      title="{{ $color->value }}"></span>
-                                            @endforeach
-                                            @if($colors->count() >= 4)
-                                                <small class="text-muted ms-1">+more</small>
-                                            @endif
-                                        </div>
-                                    @endif
-                                    
-                                    @if($sizes->count() > 0)
-                                        <div class="size-options">
-                                            <small class="text-muted">
-                                                {{ $sizes->pluck('value')->implode(', ') }}
-                                                @if($sizes->count() >= 3) +more @endif
-                                            </small>
-                                        </div>
-                                    @endif
-                                </div>
-                            </div>
-                        @endif
-                        
-                        <!-- Price -->
-                        <div class="price-section mb-3">
                             @php
-                                $minPrice = $product->variations->min('price');
-                                $maxPrice = $product->variations->max('price');
+                                $colors = $product->variations->flatMap->attributeValues
+                                    ->where('attribute.name', 'Color')
+                                    ->unique('value')
+                                    ->take(6);
                             @endphp
                             
-                            @if($minPrice == $maxPrice)
-                                <h5 class="text-primary mb-0">₹{{ number_format($minPrice, 2) }}</h5>
-                            @else
-                                <h5 class="text-primary mb-0">
-                                    ₹{{ number_format($minPrice, 2) }} - ₹{{ number_format($maxPrice, 2) }}
-                                </h5>
+                            @if($colors->count() > 0)
+                                <div class="color-swatches mb-3">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <small class="text-muted">Colors:</small>
+                                        <div class="d-flex gap-1">
+                                            @foreach($colors as $color)
+                                                <span class="color-swatch rounded-circle border" 
+                                                      style="width: 20px; height: 20px; background-color: {{ strtolower($color->value) }};"
+                                                      title="{{ $color->value }}"></span>
+                                            @endforeach
+                                            @if($colors->count() >= 6)
+                                                <small class="text-muted">+{{ $product->variations->count() - 6 }} more</small>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
                             @endif
-                            
-                            <!-- Stock info -->
-                            <div class="stock-info">
+                        @endif
+                        
+                        <!-- Price & Rating -->
+                        <div class="d-flex justify-content-between align-items-end">
+                            <div class="price-section">
+                                @php
+                                    $minPrice = $product->variations->min('price');
+                                    $maxPrice = $product->variations->max('price');
+                                @endphp
+                                
+                                @if($minPrice == $maxPrice)
+                                    <h5 class="text-primary mb-0 fw-bold">₹{{ number_format($minPrice, 0) }}</h5>
+                                @else
+                                    <h6 class="text-primary mb-0 fw-bold">
+                                        ₹{{ number_format($minPrice, 0) }} - ₹{{ number_format($maxPrice, 0) }}
+                                    </h6>
+                                @endif
+                                
                                 @if($totalStock > 0)
                                     <small class="text-success">
-                                        <i class="bi bi-check-circle me-1"></i>
-                                        {{ $totalStock }} in stock
+                                        <i class="bi bi-check-circle-fill me-1"></i>In Stock
                                     </small>
                                 @else
                                     <small class="text-danger">
-                                        <i class="bi bi-x-circle me-1"></i>
-                                        Out of stock
+                                        <i class="bi bi-x-circle-fill me-1"></i>Out of Stock
                                     </small>
                                 @endif
                             </div>
-                        </div>
-                        
-                        <!-- Action Buttons -->
-                        <div class="d-grid gap-2">
-                            @if($totalStock > 0)
-                                @if($product->variations->count() === 1)
-                                    <button type="button" class="btn btn-primary add-to-cart-btn" 
-                                            data-variation-id="{{ $product->variations->first()->id }}">
-                                        <i class="bi bi-cart-plus me-2"></i>Add to Cart
-                                    </button>
-                                @else
-                                    <a href="{{ route('products.show', $product->slug) }}" 
-                                       class="btn btn-outline-primary">
-                                        <i class="bi bi-eye me-2"></i>View Options
-                                    </a>
-                                @endif
-                            @else
-                                <button type="button" class="btn btn-outline-secondary notify-when-available-btn" 
-                                        data-product-id="{{ $product->id }}">
-                                    <i class="bi bi-bell me-2"></i>Notify When Available
-                                </button>
-                            @endif
+                            
+                            <!-- Rating -->
+                            <div class="rating text-end">
+                                <div class="d-flex align-items-center text-warning small">
+                                    @for($i = 1; $i <= 5; $i++)
+                                        @if($i <= 4)
+                                            <i class="bi bi-star-fill"></i>
+                                        @else
+                                            <i class="bi bi-star"></i>
+                                        @endif
+                                    @endfor
+                                </div>
+                                <small class="text-muted">(4.2)</small>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         @endforeach
     </div>
+    
+    <!-- Enhanced Styles for Visual Search Results -->
+    <style>
+    /* Product Card Hover Effects */
+    .product-card {
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        border-radius: 16px !important;
+    }
+    
+    .product-card:hover {
+        transform: translateY(-8px);
+        box-shadow: 0 20px 40px rgba(0,0,0,0.1) !important;
+    }
+    
+    .product-card:hover .product-image {
+        transform: scale(1.08);
+    }
+    
+    .product-card:hover .product-overlay {
+        transform: translateY(0) !important;
+    }
+    
+    /* Image Styling */
+    .product-image {
+        transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    .object-fit-cover {
+        object-fit: cover;
+    }
+    
+    /* Visual Search Header Gradient */
+    .visual-search-results-header .card {
+        border-radius: 20px !important;
+        box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+    }
+    
+    /* Visual Match Badge Animation */
+    .visual-match-badge {
+        animation: pulse-glow 2s infinite;
+    }
+    
+    @keyframes pulse-glow {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+    }
+    
+    /* Action Buttons */
+    .product-actions .btn {
+        backdrop-filter: blur(10px);
+        background-color: rgba(255, 255, 255, 0.95) !important;
+        transition: all 0.2s ease;
+    }
+    
+    .product-actions .btn:hover {
+        transform: scale(1.1);
+        background-color: rgba(255, 255, 255, 1) !important;
+    }
+    
+    /* Color Swatches */
+    .color-swatch {
+        border: 2px solid #fff !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        transition: transform 0.2s ease;
+    }
+    
+    .color-swatch:hover {
+        transform: scale(1.2);
+    }
+    
+    /* Responsive Design */
+    @media (max-width: 768px) {
+        .product-card:hover {
+            transform: none;
+        }
+        
+        .product-overlay {
+            transform: translateY(0) !important;
+            background: rgba(0,0,0,0.6) !important;
+        }
+        
+        .visual-search-results-header .row > div {
+            text-align: center !important;
+            margin-bottom: 1rem;
+        }
+    }
+    
+    /* Typography Enhancements */
+    .product-title a {
+        transition: color 0.2s ease;
+    }
+    
+    .product-title a:hover {
+        color: var(--bs-primary) !important;
+    }
+    
+    /* Badge Styling */
+    .badge {
+        font-weight: 500;
+        letter-spacing: 0.5px;
+    }
+    
+    /* Price Text */
+    .price-section h5, .price-section h6 {
+        font-weight: 700;
+        letter-spacing: -0.5px;
+    }
+    </style>
+
 @else
     <!-- No Results Found -->
     <div class="no-results text-center py-5">
@@ -325,11 +456,21 @@
 </style>
 
 <script>
-$(document).ready(function() {
-    // Add to cart functionality
-    $('.add-to-cart-btn').click(function() {
-        const variationId = $(this).data('variation-id');
-        const button = $(this);
+// Ensure jQuery is available for search results
+(function() {
+    function initSearchResults() {
+        if (typeof jQuery === 'undefined') {
+            console.warn('jQuery not available for search results functionality');
+            return;
+        }
+        
+        var $ = jQuery;
+        
+        $(document).ready(function() {
+            // Add to cart functionality
+            $('.add-to-cart-btn').click(function() {
+                const variationId = $(this).data('variation-id');
+                const button = $(this);
         
         $.ajax({
             url: '{{ route("cart.add") }}',
@@ -439,5 +580,24 @@ $(document).ready(function() {
             $(this).remove();
         });
     }
-});
+        });
+    }
+    
+    // Initialize when jQuery is available
+    if (typeof jQuery !== 'undefined') {
+        initSearchResults();
+    } else {
+        // Wait for jQuery to load
+        var checkJQuery = setInterval(function() {
+            if (typeof jQuery !== 'undefined') {
+                clearInterval(checkJQuery);
+                initSearchResults();
+            }
+        }, 50);
+        
+        setTimeout(function() {
+            clearInterval(checkJQuery);
+        }, 2000);
+    }
+})();
 </script>

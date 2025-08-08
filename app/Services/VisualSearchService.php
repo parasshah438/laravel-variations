@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\Product;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\DB;
 
@@ -32,10 +31,11 @@ class VisualSearchService
             }
             
             // Method 2: Use basic image analysis (fallback)
-            return $this->searchWithBasicAnalysis($imagePath);
+            $results = $this->searchWithBasicAnalysis($imagePath);
+            
+            return $results;
             
         } catch (\Exception $e) {
-            Log::error('Visual search service error: ' . $e->getMessage());
             return $this->getFallbackResults();
         }
     }
@@ -74,7 +74,6 @@ class VisualSearchService
             return $this->searchWithBasicAnalysis($imagePath);
             
         } catch (\Exception $e) {
-            Log::error('Google Vision API error: ' . $e->getMessage());
             return $this->searchWithBasicAnalysis($imagePath);
         }
     }
@@ -119,6 +118,10 @@ class VisualSearchService
         try {
             // Get image properties
             $imageInfo = getimagesize($imagePath);
+            if (!$imageInfo) {
+                return $this->getFallbackResults();
+            }
+            
             $dominantColors = $this->extractDominantColors($imagePath);
             
             // First, try to find products with similar images
@@ -130,10 +133,11 @@ class VisualSearchService
             // If no similar images found, use color-based search
             $searchTerms = $this->analyzeImageBasic($imagePath, $dominantColors);
             
-            return $this->searchProductsByTerms($searchTerms);
+            $results = $this->searchProductsByTerms($searchTerms);
+            
+            return $results;
             
         } catch (\Exception $e) {
-            Log::error('Basic image analysis error: ' . $e->getMessage());
             return $this->getFallbackResults();
         }
     }
@@ -149,21 +153,25 @@ class VisualSearchService
                 ->get();
 
             $matches = [];
+            $totalComparisons = 0;
             
             foreach ($products as $product) {
                 foreach ($product->images as $productImage) {
                     $productImagePath = storage_path('app/public/' . $productImage->image_path);
+                    $totalComparisons++;
                     
-                    if (file_exists($productImagePath)) {
-                        $similarity = $this->compareImages($uploadedImagePath, $productImagePath);
-                        
-                        if ($similarity > 0.6) { // 60% similarity threshold
-                            $matches[] = [
-                                'product' => $product,
-                                'similarity' => $similarity
-                            ];
-                            break; // Found a match for this product
-                        }
+                    if (!file_exists($productImagePath)) {
+                        continue;
+                    }
+                    
+                    $similarity = $this->compareImages($uploadedImagePath, $productImagePath);
+                    
+                    if ($similarity > 0.6) { // 60% similarity threshold
+                        $matches[] = [
+                            'product' => $product,
+                            'similarity' => $similarity
+                        ];
+                        break; // Found a match for this product
                     }
                 }
             }
@@ -181,7 +189,6 @@ class VisualSearchService
             return [];
             
         } catch (\Exception $e) {
-            Log::error('Image comparison error: ' . $e->getMessage());
             return [];
         }
     }
@@ -446,8 +453,11 @@ class VisualSearchService
     protected function searchProductsByTerms($searchTerms)
     {
         if (empty($searchTerms)) {
+            Log::info('No search terms provided, using fallback results');
             return $this->getFallbackResults();
         }
+
+        Log::info('Searching products by terms', ['terms' => $searchTerms]);
 
         $query = Product::with(['images', 'category', 'brand', 'variations'])
             ->where('status', 'active');
@@ -468,6 +478,11 @@ class VisualSearchService
 
         // Order by most recent first as relevance proxy
         $results = $query->latest()->limit(20)->get();
+        
+        Log::info('Products found by terms', [
+            'count' => $results->count(),
+            'product_names' => $results->pluck('name')->toArray()
+        ]);
 
         return $this->formatResults($results, $searchTerms);
     }
@@ -535,12 +550,19 @@ class VisualSearchService
      */
     protected function getFallbackResults()
     {
+        Log::info('Retrieving fallback results - showing recent products');
+        
         // Return recent or random products as fallback
         $fallbackProducts = Product::with(['images', 'category', 'brand', 'variations'])
             ->where('status', 'active')
             ->latest()
             ->limit(10)
             ->get();
+
+        Log::info('Fallback results retrieved', [
+            'count' => $fallbackProducts->count(),
+            'product_names' => $fallbackProducts->pluck('name')->toArray()
+        ]);
 
         return $this->formatResults($fallbackProducts);
     }

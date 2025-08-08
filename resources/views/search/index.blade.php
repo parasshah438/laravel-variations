@@ -275,413 +275,191 @@
 
 @push('scripts')
 <script>
-$(document).ready(function() {
-    let currentFilters = {
-        q: '{{ request("q") }}',
-        sort: '{{ request("sort", "relevance") }}',
-        categories: {{ json_encode(request('categories', [])) }},
-        brands: {{ json_encode(request('brands', [])) }},
-        attributes: {{ json_encode(request('attributes', [])) }},
-        price_min: {{ request('price_min', 'null') }},
-        price_max: {{ request('price_max', 'null') }},
-        in_stock: {{ request('in_stock') ? 'true' : 'false' }}
-    };
-
-    let searchTimeout;
-    let isSearching = false;
-
-    // Handle visual search results from session storage
-    if (sessionStorage.getItem('visualSearchResults') && '{{ request("visual") }}' === '1') {
-        console.log('Loading visual search results from session storage');
-        const visualResults = JSON.parse(sessionStorage.getItem('visualSearchResults'));
-        
-        if (visualResults && visualResults.length > 0) {
-            displayVisualSearchResults(visualResults);
+// Ensure jQuery is loaded before running our code
+(function() {
+    function initSearchPage() {
+        if (typeof jQuery === 'undefined') {
+            return;
         }
         
-        // Clear session storage after use
-        sessionStorage.removeItem('visualSearchResults');
-    }
+        var $ = jQuery; // Ensure $ is available
+        
+        $(document).ready(function() {
+            
+            let currentFilters = {
+                q: '{{ request("q") }}',
+                sort: '{{ request("sort", "relevance") }}',
+                categories: {!! json_encode(request('categories', [])) !!},
+                brands: {!! json_encode(request('brands', [])) !!},
+                attributes: {!! json_encode(request('attributes', [])) !!},
+                price_min: {{ request('price_min') ? request('price_min') : 'null' }},
+                price_max: {{ request('price_max') ? request('price_max') : 'null' }},
+                in_stock: {{ request('in_stock') ? 'true' : 'false' }}
+            };
 
-    // Initialize page
-    updateActiveFilters();
-    initializeSliders();
-        sort: '{{ request("sort", "relevance") }}',
-        categories: {{ json_encode(request('categories', [])) }},
-        brands: {{ json_encode(request('brands', [])) }},
-        attributes: {{ json_encode(request('attributes', [])) }},
-        price_min: {{ request('price_min', 'null') }},
-        price_max: {{ request('price_max', 'null') }},
-        in_stock: {{ request('in_stock') ? 'true' : 'false' }}
-    };
+            let searchTimeout;
+            let isSearching = false;
 
-    let searchTimeout;
-    let isSearching = false;
-
-    // Initialize page
-    updateActiveFilters();
-    initializeSliders();
-
-    // Sort functionality
-    $('.sort-option').click(function(e) {
-        e.preventDefault();
-        const sort = $(this).data('sort');
-        currentFilters.sort = sort;
-        
-        // Update dropdown text
-        $('#sortDropdown').html(`<i class="bi bi-sort-down me-2"></i>${$(this).text()}`);
-        
-        performSearch();
-    });
-
-    // View mode toggle
-    $('input[name="view-mode"]').change(function() {
-        const viewMode = $(this).attr('id');
-        toggleViewMode(viewMode);
-        localStorage.setItem('search_view_mode', viewMode);
-    });
-
-    // Load saved view mode
-    const savedViewMode = localStorage.getItem('search_view_mode');
-    if (savedViewMode) {
-        $(`#${savedViewMode}`).prop('checked', true);
-        toggleViewMode(savedViewMode);
-    }
-
-    // Filter change handlers
-    $('.filter-checkbox').change(function() {
-        const filterType = $(this).data('filter-type');
-        const filterValue = $(this).val();
-        
-        if (!currentFilters[filterType]) {
-            currentFilters[filterType] = [];
-        }
-        
-        if ($(this).is(':checked')) {
-            if (!currentFilters[filterType].includes(filterValue)) {
-                currentFilters[filterType].push(filterValue);
-            }
-        } else {
-            currentFilters[filterType] = currentFilters[filterType].filter(v => v != filterValue);
-        }
-        
-        performSearch();
-    });
-
-    // Price range filter
-    $('#price-min, #price-max').on('input', function() {
-        clearTimeout(searchTimeout);
-        
-        const priceMin = $('#price-min').val() || null;
-        const priceMax = $('#price-max').val() || null;
-        
-        currentFilters.price_min = priceMin;
-        currentFilters.price_max = priceMax;
-        
-        searchTimeout = setTimeout(() => {
-            performSearch();
-        }, 1000);
-    });
-
-    // In stock filter
-    $('#in-stock-filter').change(function() {
-        currentFilters.in_stock = $(this).is(':checked');
-        performSearch();
-    });
-
-    // Clear all filters
-    $('#clear-all-filters').click(function() {
-        currentFilters = {
-            q: currentFilters.q,
-            sort: 'relevance',
-            categories: [],
-            brands: [],
-            attributes: [],
-            price_min: null,
-            price_max: null,
-            in_stock: false
-        };
-        
-        // Reset form elements
-        $('.filter-checkbox').prop('checked', false);
-        $('#price-min, #price-max').val('');
-        $('#in-stock-filter').prop('checked', false);
-        
-        performSearch();
-    });
-
-    // Remove individual filter tags
-    $(document).on('click', '.filter-tag-remove', function() {
-        const filterType = $(this).data('filter-type');
-        const filterValue = $(this).data('filter-value');
-        
-        if (Array.isArray(currentFilters[filterType])) {
-            currentFilters[filterType] = currentFilters[filterType].filter(v => v != filterValue);
-        } else {
-            currentFilters[filterType] = null;
-        }
-        
-        // Uncheck corresponding checkbox
-        $(`.filter-checkbox[data-filter-type="${filterType}"][value="${filterValue}"]`).prop('checked', false);
-        
-        performSearch();
-    });
-
-    // Perform search function
-    function performSearch() {
-        if (isSearching) return;
-        
-        isSearching = true;
-        $('#search-loading').removeClass('d-none');
-        
-        // Clean up null/empty values
-        const cleanFilters = Object.fromEntries(
-            Object.entries(currentFilters).filter(([key, value]) => {
-                if (Array.isArray(value)) return value.length > 0;
-                return value !== null && value !== '' && value !== false;
-            })
-        );
-        
-        $.ajax({
-            url: '{{ route("search.filter") }}',
-            method: 'GET',
-            data: cleanFilters,
-            success: function(response) {
-                if (response.success) {
-                    $('#search-results').html(response.html);
-                    $('#pagination-container').html(response.pagination);
+            // Handle visual search results from session storage
+            if (sessionStorage.getItem('visualSearchResults') && '{{ request("visual") }}' === '1') {
+                try {
+                    const visualResults = JSON.parse(sessionStorage.getItem('visualSearchResults'));
                     
-                    // Update facets
-                    updateFacets(response.facets);
-                    
-                    // Update URL without page reload
-                    const newUrl = new URL(window.location);
-                    Object.keys(cleanFilters).forEach(key => {
-                        if (cleanFilters[key] !== null && cleanFilters[key] !== '') {
-                            newUrl.searchParams.set(key, cleanFilters[key]);
-                        } else {
-                            newUrl.searchParams.delete(key);
-                        }
-                    });
-                    window.history.pushState({}, '', newUrl);
-                    
-                    // Update active filters display
-                    updateActiveFilters();
-                    
-                    // Scroll to results
-                    $('html, body').animate({
-                        scrollTop: $('#search-results').offset().top - 100
-                    }, 300);
+                    if (visualResults && visualResults.length > 0) {
+                        displayVisualSearchResults(visualResults);
+                    }
+                } catch (e) {
+                    // Error parsing visual search results
                 }
-            },
-            error: function(xhr) {
-                console.error('Search failed:', xhr);
-                showToast('Search failed. Please try again.', 'error');
-            },
-            complete: function() {
-                isSearching = false;
-                $('#search-loading').addClass('d-none');
+                
+                // Clear session storage after use
+                sessionStorage.removeItem('visualSearchResults');
+            } else {
+                console.log('No visual search results in storage or not visual search page');
+                console.log('Visual search results exist:', !!sessionStorage.getItem('visualSearchResults'));
+                console.log('Is visual search page:', '{{ request("visual") }}' === '1');
+            }
+
+            // Initialize page functions with safety checks
+            if (typeof updateActiveFilters === 'function') {
+                updateActiveFilters();
+            } else {
+                console.warn('updateActiveFilters function not found');
+            }
+            
+            if (typeof initializeSliders === 'function') {
+                initializeSliders();
+            } else {
+                console.warn('initializeSliders function not found');
             }
         });
-    }
-
-    // Update active filters display
-    function updateActiveFilters() {
-        const activeFiltersContainer = $('#active-filters');
-        const filterTagsContainer = $('#filter-tags');
         
-        let hasActiveFilters = false;
-        let tagsHtml = '';
-        
-        // Categories
-        if (currentFilters.categories && currentFilters.categories.length > 0) {
-            currentFilters.categories.forEach(categoryId => {
-                const categoryName = $(`.filter-checkbox[data-filter-type="categories"][value="${categoryId}"]`).data('label');
-                tagsHtml += `<span class="badge bg-primary me-1 mb-1">
-                    Category: ${categoryName}
-                    <button type="button" class="btn-close btn-close-white ms-2 filter-tag-remove" 
-                            data-filter-type="categories" data-filter-value="${categoryId}"></button>
-                </span>`;
-                hasActiveFilters = true;
-            });
-        }
-        
-        // Brands
-        if (currentFilters.brands && currentFilters.brands.length > 0) {
-            currentFilters.brands.forEach(brandId => {
-                const brandName = $(`.filter-checkbox[data-filter-type="brands"][value="${brandId}"]`).data('label');
-                tagsHtml += `<span class="badge bg-success me-1 mb-1">
-                    Brand: ${brandName}
-                    <button type="button" class="btn-close btn-close-white ms-2 filter-tag-remove" 
-                            data-filter-type="brands" data-filter-value="${brandId}"></button>
-                </span>`;
-                hasActiveFilters = true;
-            });
-        }
-        
-        // Price range
-        if (currentFilters.price_min || currentFilters.price_max) {
-            const priceText = `₹${currentFilters.price_min || 0} - ₹${currentFilters.price_max || '∞'}`;
-            tagsHtml += `<span class="badge bg-warning text-dark me-1 mb-1">
-                Price: ${priceText}
-                <button type="button" class="btn-close ms-2 filter-tag-remove" 
-                        data-filter-type="price" data-filter-value="range"></button>
-            </span>`;
-            hasActiveFilters = true;
-        }
-        
-        // In stock
-        if (currentFilters.in_stock) {
-            tagsHtml += `<span class="badge bg-info me-1 mb-1">
-                In Stock Only
-                <button type="button" class="btn-close btn-close-white ms-2 filter-tag-remove" 
-                        data-filter-type="in_stock" data-filter-value="true"></button>
-            </span>`;
-            hasActiveFilters = true;
-        }
-        
-        filterTagsContainer.html(tagsHtml);
-        
-        if (hasActiveFilters) {
-            activeFiltersContainer.show();
-        } else {
-            activeFiltersContainer.hide();
-        }
-    }
-
-    // Display visual search results
-    function displayVisualSearchResults(results) {
-        let html = '<div class="products-grid row g-4" id="products-grid">';
-        
-        results.forEach(product => {
-            html += `
-                <div class="col-xl-4 col-lg-6 col-md-6 col-sm-6 product-item">
-                    <div class="card h-100 border-0 shadow-sm product-card">
-                        <div class="position-relative product-image">
-                            ${product.image ? `
-                                <img src="${product.image}" class="card-img-top" alt="${product.name}" 
-                                     style="height: 250px; object-fit: cover;">
-                            ` : `
-                                <div class="card-img-top bg-light d-flex align-items-center justify-content-center" 
-                                     style="height: 250px;">
-                                    <i class="bi bi-image text-muted" style="font-size: 3rem;"></i>
-                                </div>
-                            `}
-                            
-                            <!-- Visual Search Badge -->
-                            <div class="position-absolute top-0 start-0 m-2">
-                                <span class="badge bg-info">
-                                    <i class="bi bi-camera me-1"></i>Visual Match
-                                </span>
-                                ${product.similarity_score ? `
-                                    <span class="badge bg-success ms-1">
-                                        ${Math.round(product.similarity_score * 100)}% Match
+        // Define functions in the global scope so they're available
+        window.displayVisualSearchResults = function(results) {
+            console.log('displayVisualSearchResults called with:', results);
+            
+            var $ = jQuery;
+            let html = '<div class="products-grid row g-4" id="products-grid">';
+            
+            results.forEach(product => {
+                html += `
+                    <div class="col-xl-4 col-lg-6 col-md-6 col-sm-6 product-item">
+                        <div class="card h-100 border-0 shadow-sm product-card">
+                            <div class="position-relative product-image">
+                                ${product.image ? `
+                                    <img src="${product.image}" class="card-img-top" alt="${product.name}" 
+                                         style="height: 250px; object-fit: cover;">
+                                ` : `
+                                    <div class="card-img-top bg-light d-flex align-items-center justify-content-center" 
+                                         style="height: 250px;">
+                                        <i class="bi bi-image text-muted" style="font-size: 3rem;"></i>
+                                    </div>
+                                `}
+                                
+                                <!-- Visual Search Badge -->
+                                <div class="position-absolute top-0 start-0 m-2">
+                                    <span class="badge bg-info">
+                                        <i class="bi bi-camera me-1"></i>Visual Match
                                     </span>
-                                ` : ''}
-                            </div>
-                            
-                            <!-- Quick actions -->
-                            <div class="position-absolute top-0 end-0 m-2">
-                                <div class="btn-group-vertical">
-                                    <button type="button" class="btn btn-sm btn-light wishlist-btn" 
-                                            data-product-id="${product.id}" title="Add to Wishlist">
-                                        <i class="bi bi-heart"></i>
-                                    </button>
-                                    <button type="button" class="btn btn-sm btn-light quick-view-btn" 
-                                            data-product-id="${product.id}" title="Quick View">
-                                        <i class="bi bi-eye"></i>
-                                    </button>
+                                    ${product.similarity_score ? `
+                                        <span class="badge bg-success ms-1">
+                                            ${Math.round(product.similarity_score * 100)}% Match
+                                        </span>
+                                    ` : ''}
+                                </div>
+                                
+                                <!-- Quick actions -->
+                                <div class="position-absolute top-0 end-0 m-2">
+                                    <div class="btn-group-vertical">
+                                        <button type="button" class="btn btn-sm btn-light wishlist-btn" 
+                                                data-product-id="${product.id}" title="Add to Wishlist">
+                                            <i class="bi bi-heart"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-light quick-view-btn" 
+                                                data-product-id="${product.id}" title="Quick View">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                        
-                        <div class="card-body">
-                            <!-- Category and Brand -->
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                ${product.category ? `<small class="text-muted">${product.category}</small>` : ''}
-                                ${product.brand ? `<small class="text-primary fw-bold">${product.brand}</small>` : ''}
-                            </div>
                             
-                            <!-- Product Title -->
-                            <h6 class="card-title mb-2">
-                                <a href="${product.url}" class="text-decoration-none text-dark product-title">
-                                    ${product.name}
-                                </a>
-                            </h6>
-                            
-                            <!-- Price -->
-                            <div class="price-section mb-3">
-                                <h6 class="text-primary mb-0">₹${parseFloat(product.price).toLocaleString()}</h6>
-                                ${product.sale_price && product.sale_price < product.price ? `
-                                    <small class="text-muted text-decoration-line-through">
-                                        ₹${parseFloat(product.sale_price).toLocaleString()}
-                                    </small>
-                                ` : ''}
-                            </div>
-                            
-                            <!-- Action Button -->
-                            <div class="d-grid">
-                                <a href="${product.url}" class="btn btn-outline-primary">
-                                    <i class="bi bi-eye me-2"></i>View Product
-                                </a>
+                            <div class="card-body">
+                                <!-- Category and Brand -->
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    ${product.category ? `<small class="text-muted">${product.category}</small>` : ''}
+                                    ${product.brand ? `<small class="text-primary fw-bold">${product.brand}</small>` : ''}
+                                </div>
+                                
+                                <!-- Product Title -->
+                                <h6 class="card-title mb-2">
+                                    <a href="${product.url || '/product/' + product.slug}" class="text-decoration-none text-dark product-title">
+                                        ${product.name}
+                                    </a>
+                                </h6>
+                                
+                                <!-- Price -->
+                                <div class="price-section mb-3">
+                                    <h6 class="text-primary mb-0">₹${parseFloat(product.price || 0).toLocaleString()}</h6>
+                                    ${product.sale_price && product.sale_price < product.price ? `
+                                        <small class="text-muted text-decoration-line-through">
+                                            ₹${parseFloat(product.sale_price).toLocaleString()}
+                                        </small>
+                                    ` : ''}
+                                </div>
+                                
+                                <!-- Action Button -->
+                                <div class="d-grid">
+                                    <a href="${product.url || '/product/' + product.slug}" class="btn btn-outline-primary">
+                                        <i class="bi bi-eye me-2"></i>View Product
+                                    </a>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            `;
-        });
-        
-        html += '</div>';
-        
-        // Update search results container
-        $('#search-results').html(html);
-        
-        // Update header to show visual search results count
-        $('.search-header h4').html(`
-            ${results.length} ${results.length === 1 ? 'result' : 'results'} from visual search
-            <small class="text-muted">(Visual Search)</small>
-        `);
-    }
-
-    // Toggle view mode
-    function toggleViewMode(mode) {
-        if (mode === 'list-view') {
-            $('#search-results').addClass('list-view');
-        } else {
-            $('#search-results').removeClass('list-view');
-        }
-    }
-
-    // Initialize sliders
-    function initializeSliders() {
-        // Price range slider initialization would go here
-        // Using a library like noUiSlider or similar
-    }
-
-    // Update facets
-    function updateFacets(facets) {
-        // Update category counts
-        if (facets.categories) {
-            facets.categories.forEach(category => {
-                $(`.filter-count[data-filter-type="categories"][data-filter-value="${category.id}"]`)
-                    .text(`(${category.products_count})`);
+                `;
             });
-        }
+            
+            html += '</div>';
+            
+            // Update search results container
+            var searchResultsContainer = $('#search-results');
+            if (searchResultsContainer.length) {
+                searchResultsContainer.html(html);
+                console.log('Updated search results container');
+            } else {
+                console.error('Search results container not found');
+            }
+            
+            // Update header to show visual search results count
+            var headerElement = $('.search-header h4');
+            if (headerElement.length) {
+                headerElement.html(`
+                    ${results.length} ${results.length === 1 ? 'result' : 'results'} from visual search
+                    <small class="text-muted">(Visual Search)</small>
+                `);
+                console.log('Updated header');
+            }
+        };
+    }
+    
+    // Try to initialize immediately if jQuery is already loaded
+    if (typeof jQuery !== 'undefined') {
+        initSearchPage();
+    } else {
+        // Wait for jQuery to load
+        var checkJQuery = setInterval(function() {
+            if (typeof jQuery !== 'undefined') {
+                clearInterval(checkJQuery);
+                initSearchPage();
+            }
+        }, 100);
         
-        // Update brand counts
-        if (facets.brands) {
-            facets.brands.forEach(brand => {
-                $(`.filter-count[data-filter-type="brands"][data-filter-value="${brand.id}"]`)
-                    .text(`(${brand.products_count})`);
-            });
-        }
+        // Fallback timeout after 5 seconds
+        setTimeout(function() {
+            clearInterval(checkJQuery);
+            console.error('jQuery failed to load within 5 seconds');
+        }, 5000);
     }
-
-    // Utility function for toast notifications
-    function showToast(message, type = 'info') {
-        // Implementation would depend on your toast library
-        console.log(`${type}: ${message}`);
-    }
-});
+})();
 </script>
 @endpush

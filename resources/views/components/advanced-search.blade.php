@@ -481,7 +481,24 @@
 
 @push('scripts')
 <script>
-$(document).ready(function() {
+// Prevent multiple initialization
+if (typeof window.advancedSearchInitialized === 'undefined') {
+    window.advancedSearchInitialized = true;
+    
+    // Global scope variables and functions
+    let stream = null;
+    let capturedImageBlob = null;
+
+    function stopCamera() {
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+            stream = null;
+        }
+        $('#camera-preview').hide();
+        $('.camera-area').show();
+    }
+
+    $(document).ready(function() {
     let searchTimeout;
     let currentSuggestionIndex = -1;
     let suggestions = [];
@@ -500,9 +517,7 @@ $(document).ready(function() {
     // Initialize voice search
     if (isVoiceSearchSupported) {
         initializeVoiceSearch();
-        console.log('Voice search is supported and initialized');
     } else {
-        console.log('Voice search not supported - showing fallback');
         // Show button but with fallback behavior
         $('.voice-search-btn').show().click(function() {
             alert('Voice search is not supported in your browser. Please try Chrome, Firefox, or Edge.');
@@ -511,13 +526,6 @@ $(document).ready(function() {
 
     // Initialize visual search (always available)
     initializeVisualSearch();
-    console.log('Visual search initialized');
-    
-    // Debug: Check if icons are visible
-    console.log('Voice button exists:', $('#voice-search-btn').length);
-    console.log('Visual button exists:', $('#visual-search-btn').length);
-    console.log('Voice button visible:', $('#voice-search-btn').is(':visible'));
-    console.log('Visual button visible:', $('#visual-search-btn').is(':visible'));
     
     // Icon fallback system
     setTimeout(function() {
@@ -527,18 +535,16 @@ $(document).ready(function() {
         testBootstrapIcon.remove();
         
         if (!bsIconContent || bsIconContent === 'none' || bsIconContent === '""') {
-            console.log('Bootstrap Icons not working, switching to Font Awesome');
             // Hide Bootstrap Icons, show Font Awesome
             $('.bi').hide();
             $('.fas').show();
         } else {
-            console.log('Bootstrap Icons working correctly');
+            // Bootstrap Icons are working
         }
         
         // Final fallback to emoji if neither icon font works
         setTimeout(function() {
             if (!$('#voice-search-btn i:visible').length) {
-                console.log('No icons working, showing emoji fallbacks');
                 $('#voice-search-btn i').hide();
                 $('#voice-search-btn span').show();
                 $('#visual-search-btn i').hide();
@@ -604,7 +610,6 @@ $(document).ready(function() {
     $('#voice-search-btn').click(function(e) {
         e.preventDefault();
         e.stopPropagation();
-        console.log('Voice search button clicked');
         
         if (isVoiceSearchSupported) {
             const voiceModal = new bootstrap.Modal(document.getElementById('voiceSearchModal'), {
@@ -620,7 +625,6 @@ $(document).ready(function() {
     $('#visual-search-btn').click(function(e) {
         e.preventDefault();
         e.stopPropagation();
-        console.log('Visual search button clicked');
         
         const visualModal = new bootstrap.Modal(document.getElementById('visualSearchModal'), {
             backdrop: false,
@@ -632,19 +636,19 @@ $(document).ready(function() {
 
     // Modal event handlers
     $('#voiceSearchModal').on('shown.bs.modal', function() {
-        console.log('Voice modal opened');
+        // Voice modal opened
     });
     
     $('#voiceSearchModal').on('hidden.bs.modal', function() {
-        console.log('Voice modal closed');
+        // Voice modal closed
     });
     
     $('#visualSearchModal').on('shown.bs.modal', function() {
-        console.log('Visual modal opened');
+        // Visual modal opened
     });
     
     $('#visualSearchModal').on('hidden.bs.modal', function() {
-        console.log('Visual modal closed');
+        // Visual modal closed
         stopCamera();
         $('#image-preview').hide();
         $('#upload-area, .camera-area').show();
@@ -848,9 +852,6 @@ $(document).ready(function() {
 
     // Visual search functionality
     function initializeVisualSearch() {
-        let stream;
-        let capturedImageBlob = null;
-        
         // File upload
         $('#image-upload').change(function(e) {
             const file = e.target.files[0];
@@ -972,15 +973,6 @@ $(document).ready(function() {
             });
         });
 
-        function stopCamera() {
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
-                stream = null;
-            }
-            $('#camera-preview').hide();
-            $('.camera-area').show();
-        }
-
         function displayImagePreview(file) {
             const reader = new FileReader();
             reader.onload = function(e) {
@@ -1008,5 +1000,7 @@ $(document).ready(function() {
         }
     });
 });
+
+} // End of advancedSearchInitialized check
 </script>
 @endpush

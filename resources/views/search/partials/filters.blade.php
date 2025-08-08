@@ -218,12 +218,21 @@
 -->
 
 <script>
-$(document).ready(function() {
-    // Price range options
-    $('.price-range-option').change(function() {
-        if ($(this).is(':checked')) {
-            const min = $(this).data('min');
-            const max = $(this).data('max');
+// Ensure jQuery is available for filters
+(function() {
+    function initFilters() {
+        if (typeof jQuery === 'undefined') {
+            return;
+        }
+        
+        var $ = jQuery;
+        
+        $(document).ready(function() {
+            // Price range options
+            $('.price-range-option').change(function() {
+                if ($(this).is(':checked')) {
+                    const min = $(this).data('min');
+                    const max = $(this).data('max');
             
             $('#price-min').val(min);
             $('#price-max').val(max);
@@ -251,5 +260,23 @@ $(document).ready(function() {
             });
         }
     });
-});
+        });
+    }
+    
+    // Initialize when jQuery is available
+    if (typeof jQuery !== 'undefined') {
+        initFilters();
+    } else {
+        var checkJQuery = setInterval(function() {
+            if (typeof jQuery !== 'undefined') {
+                clearInterval(checkJQuery);
+                initFilters();
+            }
+        }, 50);
+        
+        setTimeout(function() {
+            clearInterval(checkJQuery);
+        }, 2000);
+    }
+})();
 </script>

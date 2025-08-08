@@ -3,13 +3,6 @@
 @section('title', 'Shop - All Products')
 
 @section('content')
-<div class="container-fluid py-4">
-    <div class="row">
-        @extends('layouts.app')
-
-@section('title', 'Shop - All Products')
-
-@section('content')
 <!-- Shop Header with Search -->
 <div class="shop-header bg-light py-4 border-bottom">
     <div class="container">

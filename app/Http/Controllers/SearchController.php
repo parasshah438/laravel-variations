@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Services\SearchService;
+use App\Services\VisualSearchService;
+use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Validator;
@@ -10,10 +12,12 @@ use Illuminate\Support\Facades\Validator;
 class SearchController extends Controller
 {
     protected $searchService;
+    protected $visualSearchService;
 
-    public function __construct(SearchService $searchService)
+    public function __construct(SearchService $searchService, VisualSearchService $visualSearchService)
     {
         $this->searchService = $searchService;
+        $this->visualSearchService = $visualSearchService;
     }
 
     /**
@@ -21,8 +25,31 @@ class SearchController extends Controller
      */
     public function index(Request $request)
     {
+        // Handle visual search mode
+        if ($request->has('visual') && $request->get('visual') == '1') {
+            // The visual search results page - results should come from sessionStorage via JavaScript
+            // This is the page you land on AFTER uploading an image through the visual search modal
+            $results = [
+                'products' => new \Illuminate\Pagination\LengthAwarePaginator([], 0, 12),
+                'facets' => [
+                    'categories' => collect([]),
+                    'brands' => collect([]),
+                    'attributes' => collect([]),
+                    'price_ranges' => [],
+                ],
+                'suggestions' => [],
+                'query_info' => [
+                    'query' => 'Visual Search Results',
+                    'total_results' => $request->get('results', 0),
+                    'has_results' => $request->get('results', 0) > 0,
+                    'execution_time' => 0,
+                    'is_visual_search' => true,
+                    'waiting_for_js' => true, // Indicates results will be loaded by JavaScript
+                ],
+            ];
+        }
         // Initialize empty results for first load
-        if (!$request->filled('q') && !$request->has('filters')) {
+        elseif (!$request->filled('q') && !$request->has('filters')) {
             $results = [
                 'products' => new \Illuminate\Pagination\LengthAwarePaginator([], 0, 12),
                 'facets' => [
@@ -157,36 +184,118 @@ class SearchController extends Controller
         ]);
 
         try {
-            // For now, return mock results
-            // In production, integrate with AI/ML service for image recognition
-            $mockProducts = Product::with(['category', 'brand', 'images'])
-                                  ->where('status', 'active')
-                                  ->inRandomOrder()
-                                  ->limit(6)
-                                  ->get();
+            // Use the actual visual search service
+            $results = $this->visualSearchService->findSimilarProducts($request->file('image'));
 
             return response()->json([
                 'success' => true,
-                'products' => $mockProducts->map(function($product) {
-                    return [
-                        'id' => $product->id,
-                        'name' => $product->name,
-                        'slug' => $product->slug,
-                        'price' => $product->price,
-                        'image' => $product->images->first()?->image_url ?? '/images/placeholder.jpg',
-                        'category' => $product->category?->name,
-                        'brand' => $product->brand?->name,
-                        'confidence' => rand(70, 95) . '%',
-                    ];
-                }),
-                'message' => 'Visual search completed. Found ' . $mockProducts->count() . ' similar products.'
+                'results' => $results,
+                'message' => 'Visual search completed. Found ' . count($results) . ' similar products.'
             ]);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Visual search failed: ' . $e->getMessage()
+                'message' => 'Visual search failed. Please try again.'
             ], 500);
         }
+    }
+
+    /**
+     * Handle visual search from main search page
+     */
+    protected function handleVisualSearch(Request $request)
+    {
+        if ($request->hasFile('image')) {
+            try {
+                // Use the actual visual search service
+                $visualResults = $this->visualSearchService->findSimilarProducts($request->file('image'));
+                
+                // Convert visual search results to paginated format
+                $products = collect($visualResults);
+                $perPage = 12;
+                $currentPage = $request->get('page', 1);
+                $total = $products->count();
+                
+                $paginatedProducts = new \Illuminate\Pagination\LengthAwarePaginator(
+                    $products->forPage($currentPage, $perPage),
+                    $total,
+                    $perPage,
+                    $currentPage,
+                    ['path' => $request->url(), 'pageName' => 'page']
+                );
+
+                $results = [
+                    'products' => $paginatedProducts,
+                    'facets' => [
+                        'categories' => collect([]),
+                        'brands' => collect([]),
+                        'attributes' => collect([]),
+                        'price_ranges' => [],
+                    ],
+                    'suggestions' => [],
+                    'query_info' => [
+                        'query' => 'Visual Search Results',
+                        'total_results' => $total,
+                        'has_results' => $total > 0,
+                        'execution_time' => 0,
+                        'is_visual_search' => true,
+                    ],
+                ];
+
+                // For AJAX requests, return JSON
+                if ($request->ajax()) {
+                    return response()->json([
+                        'success' => true,
+                        'html' => view('search.partials.results', $results)->render(),
+                        'pagination' => $results['products']->appends($request->all())->links()->render(),
+                        'facets' => $results['facets'],
+                        'query_info' => $results['query_info'],
+                    ]);
+                }
+
+                return $results;
+            } catch (\Exception $e) {
+                $results = [
+                    'products' => new \Illuminate\Pagination\LengthAwarePaginator([], 0, 12),
+                    'facets' => [
+                        'categories' => collect([]),
+                        'brands' => collect([]),
+                        'attributes' => collect([]),
+                        'price_ranges' => [],
+                    ],
+                    'suggestions' => [],
+                    'query_info' => [
+                        'query' => 'Visual Search Error',
+                        'total_results' => 0,
+                        'has_results' => false,
+                        'execution_time' => 0,
+                        'is_visual_search' => true,
+                        'error' => $e->getMessage(),
+                    ],
+                ];
+                
+                return $results;
+            }
+        }
+
+        // No image uploaded, return empty results
+        return [
+            'products' => new \Illuminate\Pagination\LengthAwarePaginator([], 0, 12),
+            'facets' => [
+                'categories' => collect([]),
+                'brands' => collect([]),
+                'attributes' => collect([]),
+                'price_ranges' => [],
+            ],
+            'suggestions' => [],
+            'query_info' => [
+                'query' => 'Visual Search Mode',
+                'total_results' => 0,
+                'has_results' => false,
+                'execution_time' => 0,
+                'is_visual_search' => true,
+            ],
+        ];
     }
 
     /**

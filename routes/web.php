@@ -12,6 +12,7 @@ use App\Http\Controllers\AddressController;
 use App\Http\Controllers\ShopController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\VisualSearchController;
+use App\Http\Controllers\AIRecommendationController;
 use Illuminate\Support\Facades\Route;
 
 
@@ -38,24 +39,46 @@ Route::prefix('visual-search')->name('visual-search.')->group(function () {
     
     // Debug route for testing
     Route::get('/debug', function() {
-        $products = \App\Models\Product::with(['images', 'variations'])->take(5)->get();
+        $products = \App\Models\Product::with(['images', 'variations', 'category', 'brand'])->take(10)->get();
         $debug = [];
         
         foreach ($products as $product) {
+            $imageData = [];
+            foreach ($product->images as $image) {
+                $imagePath = storage_path('app/public/' . $image->image_path);
+                $imageData[] = [
+                    'path' => $image->image_path,
+                    'full_path' => $imagePath,
+                    'exists' => file_exists($imagePath),
+                    'size' => file_exists($imagePath) ? filesize($imagePath) : 0,
+                    'url' => asset('storage/' . $image->image_path)
+                ];
+            }
+            
             $debug[] = [
                 'id' => $product->id,
                 'name' => $product->name,
+                'slug' => $product->slug,
+                'status' => $product->status,
+                'description' => substr($product->description ?? '', 0, 100),
+                'category' => $product->category?->name,
+                'brand' => $product->brand?->name,
                 'images_count' => $product->images->count(),
-                'first_image' => $product->images->first()?->image_path,
+                'images' => $imageData,
                 'variations_count' => $product->variations->count(),
                 'min_price' => $product->variations->min('price'),
+                'has_white_in_name' => str_contains(strtolower($product->name), 'white'),
+                'has_shirt_in_name' => str_contains(strtolower($product->name), 'shirt'),
             ];
         }
         
         return response()->json([
             'total_products' => \App\Models\Product::count(),
-            'products' => $debug,
+            'active_products' => \App\Models\Product::where('status', 'active')->count(),
+            'products_with_images' => \App\Models\Product::whereHas('images')->count(),
             'storage_path' => storage_path('app/public/'),
+            'storage_exists' => is_dir(storage_path('app/public/')),
+            'products' => $debug,
         ]);
     })->name('debug');
 });
@@ -67,8 +90,10 @@ Route::get('/new-shop', [ShopController::class, 'newShopPage'])->name('shop.newS
 
 // Product routes
 Route::get('/', [HomeController::class, 'index'])->name('home');
-Route::get('/product/{product:slug}', [ProductController::class, 'show'])->name('products.show');
-Route::get('/products/{slug}/quick-view', [ProductController::class, 'quickView'])->name('products.quickView');
+Route::get('/product/{product:slug}', [ProductController::class, 'show'])->name('products.show')
+    ->middleware('track.behavior:view');
+Route::get('/products/{slug}/quick-view', [ProductController::class, 'quickView'])->name('products.quickView')
+    ->middleware('track.behavior:view');
 Route::get('/products/{product}/variations/{variation}', [ProductController::class, 'getVariation'])->name('products.variation');
 Route::get('/product/{product}/variations', [ProductController::class, 'getVariations'])->name('products.variations');
 Route::get('/product/{product}/filtered-attributes', [ProductController::class, 'getFilteredAttributes'])->name('products.filtered-attributes');
@@ -199,6 +224,83 @@ Route::get('/test-order-details', function() {
     }
     
     return redirect()->route('orders.show', $order->id);
+});
+
+// Test route for AI recommendations
+Route::get('/test-ai-recommendations', function() {
+    try {
+        $userCount = \App\Models\User::count();
+        $productCount = \App\Models\Product::count();
+        
+        $response = [
+            'database_status' => [
+                'users' => $userCount,
+                'products' => $productCount,
+                'user_behaviors' => \App\Models\UserBehavior::count(),
+                'product_recommendations' => \App\Models\ProductRecommendation::count(),
+            ],
+            'tables_exist' => true,
+            'models_loaded' => true,
+            'service_available' => class_exists(\App\Services\AIRecommendationService::class),
+        ];
+        
+        // Test the service if we have data
+        if ($userCount > 0 && $productCount > 0) {
+            $user = \App\Models\User::first();
+            $products = \App\Models\Product::with(['variations', 'images'])->take(3)->get();
+            $aiService = new \App\Services\AIRecommendationService();
+            
+            // Test behavior tracking
+            $aiService->trackBehavior(
+                $user->id,
+                'demo-session-' . time(),
+                $products->first()->id,
+                \App\Models\UserBehavior::TYPE_VIEW,
+                ['demo' => true, 'timestamp' => now()->toISOString()]
+            );
+            
+            // Test recommendations
+            $recommendations = $aiService->getRecommendationsForUser($user->id, null, 5);
+            
+            $response['demo_test'] = [
+                'behavior_tracked' => true,
+                'recommendations_generated' => $recommendations->count(),
+                'sample_recommendations' => $recommendations->take(3)->map(function($rec) {
+                    $product = \App\Models\Product::find($rec->product_id);
+                    return [
+                        'product_name' => $product?->name,
+                        'recommendation_type' => $rec->recommendation_type,
+                        'confidence_score' => round($rec->confidence_score, 3),
+                    ];
+                })->values(),
+            ];
+        }
+        
+        return response()->json($response, 200);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString(),
+        ], 500);
+    }
+})->name('test.ai.recommendations');
+
+// AI Recommendations Routes
+Route::prefix('ai-recommendations')->name('ai-recommendations.')->group(function () {
+    // Personalized recommendations
+    Route::get('/personalized', [AIRecommendationController::class, 'getPersonalizedRecommendations'])->name('personalized');
+    
+    // Product-specific recommendations
+    Route::get('/related/{product}', [AIRecommendationController::class, 'getRelatedProducts'])->name('related');
+    Route::get('/upsell/{product}', [AIRecommendationController::class, 'getUpsellRecommendations'])->name('upsell');
+    Route::get('/cross-sell', [AIRecommendationController::class, 'getCrossSellRecommendations'])->name('cross-sell');
+    
+    // Trending products
+    Route::get('/trending', [AIRecommendationController::class, 'getTrendingProducts'])->name('trending');
+    
+    // Behavior tracking
+    Route::post('/track-behavior', [AIRecommendationController::class, 'trackBehavior'])->name('track-behavior');
 });
 
 require __DIR__.'/auth.php';
